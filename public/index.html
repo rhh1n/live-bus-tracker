@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0057d9" />
+  <title>Live Bus Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Live Bus Tracker</h1>
+    <p>See nearby buses and ETA at bus stands in real time.</p>
+  </header>
+
+  <main>
+    <section class="map-panel">
+      <div id="map"></div>
+    </section>
+    <section class="list-panel">
+      <h2>Arrivals</h2>
+      <div class="controls">
+        <button id="locate-btn" type="button">Use my location</button>
+        <select id="radius-select" aria-label="Nearby radius">
+          <option value="2">2 km</option>
+          <option value="5" selected>5 km</option>
+          <option value="10">10 km</option>
+        </select>
+      </div>
+      <p id="location-status">Passenger location not set.</p>
+      <p id="last-updated">Waiting for updates...</p>
+      <div id="arrivals"></div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

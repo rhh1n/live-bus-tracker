@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: live-bus-tracker
+    runtime: docker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: DRIVER_API_KEY
+        sync: false
+      - key: DRIVER_LOGIN_PIN
+        sync: false
+      - key: ENABLE_SIMULATION
+        value: "false"

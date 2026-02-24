@@ -1,0 +1,116 @@
+# Live Bus Tracker (Real-World Starter)
+
+This project is now structured for real deployments:
+- Passengers see live buses in browser map
+- Drivers (or bus GPS devices) push coordinates to backend
+- Backend broadcasts updates via Socket.IO and serves nearby-bus APIs
+
+## Stack
+- Node.js + Express
+- Socket.IO
+- Leaflet + OpenStreetMap
+
+## Quick Start
+1. Install Node.js LTS: https://nodejs.org
+2. Open terminal in `live-bus-tracker`
+3. Install dependencies:
+   `npm install`
+4. Set driver API key (PowerShell):
+   `$env:DRIVER_API_KEY="your-strong-key"`
+5. Set driver login PIN (PowerShell):
+   `$env:DRIVER_LOGIN_PIN="2468"`
+6. Start server:
+   `npm start`
+7. Open:
+   `http://localhost:3000`
+
+## Passenger Flow
+- Click `Use my location`
+- App queries `/api/buses/live?lat=...&lng=...&radiusKm=...`
+- Arrivals panel shows nearest live buses and ETA
+
+## Driver Mobile Page (Real GPS)
+- Open on driver phone:
+  - `https://<your-domain>/driver`
+- Fill:
+  - `Bus ID`, `Route No`, `Destination`, `Driver PIN`
+- Tap `Unlock Driver`
+- Tap `Start Live Tracking`
+- The page continuously uploads GPS to `/api/driver/location`
+- Passenger page `https://<your-domain>/` will show the bus live
+
+## Driver / GPS Device API
+Endpoint:
+- `POST /api/driver/location`
+
+Headers:
+- `Content-Type: application/json`
+- `x-api-key: <DRIVER_API_KEY>`
+
+Body example:
+```json
+{
+  "busId": "bus-101",
+  "routeNo": "101",
+  "destination": "Railway Junction",
+  "lat": 12.9722,
+  "lng": 77.5954,
+  "speedKmph": 28,
+  "headingDeg": 80
+}
+```
+
+PowerShell test call:
+```powershell
+$headers = @{ "x-api-key" = "your-strong-key"; "Content-Type" = "application/json" }
+$body = '{"busId":"bus-101","routeNo":"101","destination":"Railway Junction","lat":12.9722,"lng":77.5954,"speedKmph":28,"headingDeg":80}'
+Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/driver/location" -Headers $headers -Body $body
+```
+
+## APIs
+- `GET /api/health`
+- `GET /api/stops`
+- `GET /api/buses/live?lat=<lat>&lng=<lng>&radiusKm=<km>`
+- `POST /api/driver/login` (requires PIN)
+- `POST /api/driver/location` (requires `x-driver-token` or `x-api-key`)
+
+## Optional Local Simulation
+If you want seed buses moving without driver data:
+- PowerShell:
+  `$env:ENABLE_SIMULATION="true"`
+- Then run `npm start`
+
+## Production Next Steps
+- Replace in-memory state with Redis/PostgreSQL.
+- Issue per-device API keys or JWT for drivers.
+- Add TLS, rate limiting, and request signing.
+- Ingest official route/stop data (GTFS static + GTFS-realtime).
+- Add monitoring and stale-device alerts.
+
+## Deploy For Mobile Use (HTTPS)
+Use HTTPS hosting so mobile location permissions work.
+
+### Option A: Render (easy)
+1. Push this folder to a GitHub repo.
+2. In Render, create `New +` -> `Web Service`.
+3. Connect your repo.
+4. Render auto-detects [render.yaml](C:\Users\HP\Desktop\aigpt\live-bus-tracker\render.yaml).
+5. Set secret env var:
+   - `DRIVER_API_KEY=your-strong-key`
+   - `DRIVER_LOGIN_PIN=2468`
+6. Deploy and open the generated `https://...onrender.com` URL on mobile.
+
+### Option B: Railway
+1. Push this folder to GitHub.
+2. In Railway, `New Project` -> `Deploy from GitHub repo`.
+3. Add env vars:
+   - `DRIVER_API_KEY=your-strong-key`
+   - `DRIVER_LOGIN_PIN=2468`
+   - `ENABLE_SIMULATION=false`
+4. Deploy and open the public HTTPS URL on mobile.
+
+## Install As Mobile App (PWA)
+After deployment:
+- Open your URL in mobile browser.
+- Chrome Android: menu -> `Add to Home screen`.
+- iPhone Safari: share -> `Add to Home Screen`.

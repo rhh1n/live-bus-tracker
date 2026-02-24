@@ -1,0 +1,13 @@
+{
+  "name": "live-bus-tracker",
+  "version": "1.0.0",
+  "description": "Live bus tracking app for passengers at bus stands",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.8.1"
+  }
+}
