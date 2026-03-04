@@ -32,13 +32,13 @@ This project is now structured for real deployments:
 - App queries `/api/buses/live?lat=...&lng=...&radiusKm=...`
 - Passenger radius is selectable up to `50 km` (default `50 km`)
 - No default/seed buses are shown; buses appear only from live driver GPS uploads
-- Arrivals panel shows nearest live buses and ETA
+- Arrivals panel shows trip, current location, distance from user, and GPS update time
 
 ## Driver Mobile Page (Real GPS)
 - Open on driver phone:
   - `https://<your-domain>/driver`
 - Fill:
-  - `Bus ID`, `Route No`, `Destination`, `Driver PIN`
+  - `Bus ID`, `Source`, `Destination`, `Driver PIN`
 - Tap `Unlock Driver`
 - Tap `Start Live Tracking`
 - The page continuously uploads GPS to `/api/driver/location`
@@ -63,7 +63,7 @@ Body example:
 ```json
 {
   "busId": "bus-101",
-  "routeNo": "101",
+  "source": "Central Bus Stand",
   "destination": "Railway Junction",
   "lat": 12.9722,
   "lng": 77.5954,
@@ -75,7 +75,7 @@ Body example:
 PowerShell test call:
 ```powershell
 $headers = @{ "x-api-key" = "your-strong-key"; "Content-Type" = "application/json" }
-$body = '{"busId":"bus-101","routeNo":"101","destination":"Railway Junction","lat":12.9722,"lng":77.5954,"speedKmph":28,"headingDeg":80}'
+$body = '{"busId":"bus-101","source":"Central Bus Stand","destination":"Railway Junction","lat":12.9722,"lng":77.5954,"speedKmph":28,"headingDeg":80}'
 Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/driver/location" -Headers $headers -Body $body
 ```
 
@@ -90,7 +90,7 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/driver/location" 
 ## Production Next Steps
 - Replace in-memory state with Redis/PostgreSQL.
 - Issue per-device API keys or JWT for drivers.
-- Add TLS, rate limiting, and request signing.
+- Add request signing and audit logs for every driver device.
 - Ingest official route/stop data (GTFS static + GTFS-realtime).
 - Add monitoring and stale-device alerts.
 
@@ -101,7 +101,7 @@ Use HTTPS hosting so mobile location permissions work.
 1. Push this folder to a GitHub repo.
 2. In Render, create `New +` -> `Web Service`.
 3. Connect your repo.
-4. Render auto-detects [render.yaml](C:\Users\HP\Desktop\aigpt\live-bus-tracker\render.yaml).
+4. Render auto-detects `render.yaml`.
 5. Set secret env var:
    - `DRIVER_API_KEY=your-strong-key`
    - `DRIVER_LOGIN_PIN=2468`

@@ -17,14 +17,32 @@ const MIN_RADIUS_KM = 0.1;
 const DEFAULT_RADIUS_KM = 50;
 const MAX_RADIUS_KM = 50;
 const LOCATION_HISTORY_LIMIT = 120;
+const JSON_BODY_LIMIT = "32kb";
+const MAX_TEXT_FIELD_LEN = 80;
+const MAX_BUS_ID_LEN = 40;
+const MAX_ROUTE_NO_LEN = 24;
+const MAX_SPEED_KMPH = 140;
+const LOGIN_RATE_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_RATE_MAX = 20;
+const LOCATION_RATE_WINDOW_MS = 60 * 1000;
+const LOCATION_RATE_MAX = 240;
 const PASSENGER_WEB_ROOT = path.join(__dirname, "public", "passenger");
 const DRIVER_WEB_ROOT = path.join(__dirname, "public", "driver");
 
-app.use(express.json());
+app.set("trust proxy", true);
+app.disable("x-powered-by");
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader("Permissions-Policy", "geolocation=(self)");
+  if (`${req.headers["x-forwarded-proto"] || ""}`.includes("https")) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
   next();
 });
 
@@ -82,6 +100,61 @@ const busStops = [
 const busState = new Map();
 const driverTokens = new Map();
 const busLocationHistory = new Map();
+const rateLimitBuckets = new Map();
+
+function getClientIp(req) {
+  const forwarded = `${req.get("x-forwarded-for") || ""}`.trim();
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+  return `${req.ip || req.socket?.remoteAddress || "unknown"}`;
+}
+
+function cleanupRateLimitBuckets() {
+  const now = Date.now();
+  Array.from(rateLimitBuckets.entries()).forEach(([key, bucket]) => {
+    if (now >= bucket.resetAt) {
+      rateLimitBuckets.delete(key);
+    }
+  });
+}
+
+function createRateLimiter(scope, windowMs, maxHits) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = `${scope}:${getClientIp(req)}`;
+    const current = rateLimitBuckets.get(key);
+
+    if (!current || now >= current.resetAt) {
+      rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    current.count += 1;
+    if (current.count <= maxHits) {
+      return next();
+    }
+
+    const retryAfterSec = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+    res.setHeader("Retry-After", String(retryAfterSec));
+    return res.status(429).json({ error: "Too many requests. Please retry shortly." });
+  };
+}
+
+const loginRateLimiter = createRateLimiter("driver-login", LOGIN_RATE_WINDOW_MS, LOGIN_RATE_MAX);
+const locationRateLimiter = createRateLimiter("driver-location", LOCATION_RATE_WINDOW_MS, LOCATION_RATE_MAX);
+
+function sanitizeText(value, maxLen = MAX_TEXT_FIELD_LEN) {
+  const cleaned = `${value ?? ""}`
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, Math.max(1, maxLen));
+}
+
+function isValidCoordinate(lat, lng) {
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
 
 function appendBusHistory(bus) {
   if (!bus?.id || !bus?.lastUpdated) {
@@ -249,7 +322,7 @@ app.get("/api/stops", (_req, res) => {
 });
 
 app.get("/api/buses/history", (req, res) => {
-  const busId = `${req.query.busId || ""}`.trim();
+  const busId = sanitizeText(req.query.busId, MAX_BUS_ID_LEN);
   if (!busId) {
     return res.status(400).json({ error: "busId query param is required" });
   }
@@ -262,8 +335,8 @@ app.get("/api/buses/history", (req, res) => {
   });
 });
 
-app.post("/api/driver/login", (req, res) => {
-  const pin = `${req.body?.pin || ""}`.trim();
+app.post("/api/driver/login", loginRateLimiter, (req, res) => {
+  const pin = sanitizeText(req.body?.pin, 24);
   if (!pin || pin !== DRIVER_LOGIN_PIN) {
     return res.status(401).json({ error: "Invalid driver PIN" });
   }
@@ -283,6 +356,12 @@ app.post("/api/driver/login", (req, res) => {
 app.get("/api/buses/live", (req, res) => {
   const lat = toNumber(req.query.lat);
   const lng = toNumber(req.query.lng);
+  const latProvided = req.query.lat !== undefined;
+  const lngProvided = req.query.lng !== undefined;
+  if ((latProvided || lngProvided) && (lat === null || lng === null || !isValidCoordinate(lat, lng))) {
+    return res.status(400).json({ error: "lat/lng must be valid coordinates." });
+  }
+
   const requestedRadiusKm = toNumber(req.query.radiusKm);
   const radiusKm = Math.min(
     MAX_RADIUS_KM,
@@ -297,10 +376,16 @@ app.get("/api/buses/live", (req, res) => {
   const filtered = buses
     .filter((bus) => (bus.distanceToUserKm === null ? true : bus.distanceToUserKm <= radiusKm))
     .sort((a, b) => {
-      if (a.distanceToUserKm === null || b.distanceToUserKm === null) {
-        return a.nearestStop.etaMin - b.nearestStop.etaMin;
+      if (a.distanceToUserKm !== null && b.distanceToUserKm !== null) {
+        return a.distanceToUserKm - b.distanceToUserKm;
       }
-      return a.distanceToUserKm - b.distanceToUserKm;
+      if (a.distanceToUserKm !== null) {
+        return -1;
+      }
+      if (b.distanceToUserKm !== null) {
+        return 1;
+      }
+      return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
     });
 
   res.json({
@@ -310,30 +395,40 @@ app.get("/api/buses/live", (req, res) => {
   });
 });
 
-app.post("/api/driver/location", requireDriverAuth, (req, res) => {
+app.post("/api/driver/location", locationRateLimiter, requireDriverAuth, (req, res) => {
   const { busId, routeNo, source, destination, lat, lng, speedKmph, headingDeg } = req.body || {};
   const latN = toNumber(lat);
   const lngN = toNumber(lng);
 
-  if (!busId || latN === null || lngN === null) {
+  const busIdClean = sanitizeText(busId, MAX_BUS_ID_LEN);
+  if (!busIdClean || latN === null || lngN === null) {
     return res.status(400).json({ error: "busId, lat, lng are required" });
   }
+  if (!isValidCoordinate(latN, lngN)) {
+    return res.status(400).json({ error: "lat/lng must be valid coordinates." });
+  }
 
-  const existing = busState.get(busId);
+  const existing = busState.get(busIdClean);
+  const routeNoClean = sanitizeText(routeNo, MAX_ROUTE_NO_LEN) || existing?.routeNo || busIdClean;
+  const sourceClean = sanitizeText(source, MAX_TEXT_FIELD_LEN) || existing?.source || "Unknown";
+  const destinationClean = sanitizeText(destination, MAX_TEXT_FIELD_LEN) || existing?.destination || "Unknown";
+  const speed = Math.min(MAX_SPEED_KMPH, Math.max(0, toNumber(speedKmph) || existing?.speedKmph || 0));
+  const heading = Math.max(0, Math.min(359, toNumber(headingDeg) || existing?.headingDeg || 0));
+
   const payload = {
-    id: busId,
-    routeNo: routeNo || existing?.routeNo || busId,
-    source: source || existing?.source || "Unknown",
-    destination: destination || existing?.destination || "Unknown",
+    id: busIdClean,
+    routeNo: routeNoClean,
+    source: sourceClean,
+    destination: destinationClean,
     lat: latN,
     lng: lngN,
-    speedKmph: Math.max(0, toNumber(speedKmph) || existing?.speedKmph || 0),
-    headingDeg: Math.max(0, Math.min(359, toNumber(headingDeg) || existing?.headingDeg || 0)),
+    speedKmph: speed,
+    headingDeg: heading,
     provider: "driver-gps",
     lastUpdated: new Date().toISOString()
   };
 
-  busState.set(busId, payload);
+  busState.set(busIdClean, payload);
   appendBusHistory(payload);
   io.emit("bus:update", buildPayload());
 
@@ -369,6 +464,14 @@ if (ENABLE_SIMULATION) {
 setInterval(() => {
   io.emit("bus:update", buildPayload());
 }, 10000);
+
+const maintenanceInterval = setInterval(() => {
+  cleanupDriverTokens();
+  cleanupRateLimitBuckets();
+}, 5 * 60 * 1000);
+if (typeof maintenanceInterval.unref === "function") {
+  maintenanceInterval.unref();
+}
 
 server.listen(PORT, () => {
   console.log(`Live bus tracker running on http://localhost:${PORT}`);

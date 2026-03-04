@@ -12,14 +12,40 @@ const logEl = document.getElementById("driver-log");
 let watchId = null;
 let sendInFlight = false;
 let driverToken = null;
+let tokenExpiryIso = null;
 let latestPosition = null;
 let uploadIntervalId = null;
 let firstFixSent = false;
+
 const DRIVER_UPLOAD_INTERVAL_MS = 2000;
+const FORM_STORAGE_KEY = "bus-tracker-driver-form-v1";
+const SESSION_STORAGE_KEY = "bus-tracker-driver-session-v1";
+const MAX_TEXT_LEN = 80;
+const MAX_BUS_ID_LEN = 40;
 
 function formatClock(dateLike = new Date()) {
   const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function normalizeText(value, maxLen = MAX_TEXT_LEN) {
+  const cleaned = `${value || ""}`
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, maxLen);
+}
+
+function getFormValues() {
+  return {
+    busId: normalizeText(busIdEl.value, MAX_BUS_ID_LEN),
+    source: normalizeText(sourceEl.value),
+    destination: normalizeText(destinationEl.value)
+  };
+}
+
+function hasRequiredFields() {
+  const form = getFormValues();
+  return !!form.busId && !!form.source && !!form.destination;
 }
 
 function addLog(msg) {
@@ -38,10 +64,100 @@ function setStatus(msg) {
   statusEl.textContent = msg;
 }
 
+function saveFormState() {
+  try {
+    const form = getFormValues();
+    localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(form));
+  } catch (_err) {
+    // localStorage unavailable
+  }
+}
+
+function restoreFormState() {
+  try {
+    const raw = localStorage.getItem(FORM_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const data = JSON.parse(raw);
+    if (data && typeof data === "object") {
+      busIdEl.value = normalizeText(data.busId, MAX_BUS_ID_LEN);
+      sourceEl.value = normalizeText(data.source);
+      destinationEl.value = normalizeText(data.destination);
+    }
+  } catch (_err) {
+    // ignore corrupt storage
+  }
+}
+
+function saveSessionState() {
+  if (!driverToken || !tokenExpiryIso) {
+    return;
+  }
+  try {
+    localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({
+        token: driverToken,
+        expiresAt: tokenExpiryIso
+      })
+    );
+  } catch (_err) {
+    // localStorage unavailable
+  }
+}
+
+function clearSessionState() {
+  try {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch (_err) {
+    // localStorage unavailable
+  }
+}
+
+function tokenIsValid(expiresAtIso) {
+  if (!expiresAtIso) {
+    return false;
+  }
+  const expiresAt = new Date(expiresAtIso).getTime();
+  return Number.isFinite(expiresAt) && Date.now() < expiresAt;
+}
+
+function restoreSessionState() {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") {
+      return;
+    }
+    if (!tokenIsValid(data.expiresAt)) {
+      clearSessionState();
+      return;
+    }
+    driverToken = `${data.token || ""}`.trim();
+    tokenExpiryIso = `${data.expiresAt || ""}`.trim();
+    if (driverToken && tokenExpiryIso) {
+      setStatus(`Driver session restored. Valid until ${formatClock(tokenExpiryIso)}.`);
+      addLog("Recovered active driver session.");
+    }
+  } catch (_err) {
+    clearSessionState();
+  }
+}
+
+function clearDriverSession() {
+  driverToken = null;
+  tokenExpiryIso = null;
+  clearSessionState();
+}
+
 function setControlState() {
   const tracking = watchId !== null;
-  const unlocked = !!driverToken;
-  startBtn.disabled = tracking || !unlocked;
+  const unlocked = !!driverToken && tokenIsValid(tokenExpiryIso);
+  startBtn.disabled = tracking || !unlocked || !hasRequiredFields();
   stopBtn.disabled = !tracking;
   unlockBtn.disabled = tracking;
 }
@@ -68,16 +184,20 @@ async function sendLocation(position) {
   }
   sendInFlight = true;
 
-  if (!driverToken) {
-    setStatus("Unlock driver first using PIN.");
+  if (!driverToken || !tokenIsValid(tokenExpiryIso)) {
+    clearDriverSession();
+    stopTracking({ keepStatusText: true });
+    setStatus("Driver session expired. Unlock again.");
+    setControlState();
     sendInFlight = false;
     return;
   }
 
+  const form = getFormValues();
   const payload = {
-    busId: busIdEl.value.trim(),
-    source: sourceEl.value.trim(),
-    destination: destinationEl.value.trim(),
+    busId: form.busId,
+    source: form.source,
+    destination: form.destination,
     lat: position.coords.latitude,
     lng: position.coords.longitude,
     speedKmph: Math.max(0, (position.coords.speed || 0) * 3.6),
@@ -96,6 +216,10 @@ async function sendLocation(position) {
 
     if (!res.ok) {
       const text = await res.text();
+      if (res.status === 401) {
+        clearDriverSession();
+        setControlState();
+      }
       throw new Error(`Upload failed (${res.status}): ${text}`);
     }
 
@@ -116,7 +240,7 @@ async function sendLocation(position) {
 }
 
 async function unlockDriver() {
-  const pin = pinEl.value.trim();
+  const pin = normalizeText(pinEl.value, 24);
   if (!pin) {
     setStatus("Enter driver PIN.");
     return;
@@ -136,12 +260,14 @@ async function unlockDriver() {
     }
 
     const data = await res.json();
-    driverToken = data.token;
-    setStatus(`Driver unlocked. Session until ${new Date(data.expiresAt).toLocaleTimeString()}.`);
+    driverToken = `${data.token || ""}`.trim();
+    tokenExpiryIso = `${data.expiresAt || ""}`.trim();
+    saveSessionState();
+    setStatus(`Driver unlocked. Session until ${formatClock(tokenExpiryIso)}.`);
     addLog("Driver PIN verified.");
     setControlState();
   } catch (err) {
-    driverToken = null;
+    clearDriverSession();
     setStatus("Invalid PIN.");
     addLog(err.message);
     setControlState();
@@ -153,8 +279,10 @@ function startTracking() {
     setStatus("Geolocation not supported in this browser.");
     return;
   }
-  if (!driverToken) {
+  if (!driverToken || !tokenIsValid(tokenExpiryIso)) {
+    clearDriverSession();
     setStatus("Unlock driver first.");
+    setControlState();
     return;
   }
   if (watchId !== null) {
@@ -162,18 +290,23 @@ function startTracking() {
     return;
   }
 
-  const busId = busIdEl.value.trim();
-  if (!busId) {
+  const form = getFormValues();
+  busIdEl.value = form.busId;
+  sourceEl.value = form.source;
+  destinationEl.value = form.destination;
+  saveFormState();
+
+  if (!form.busId) {
     setStatus("Bus is required.");
     return;
   }
 
-  if (!sourceEl.value.trim()) {
+  if (!form.source) {
     setStatus("Source is required.");
     return;
   }
 
-  if (!destinationEl.value.trim()) {
+  if (!form.destination) {
     setStatus("Destination is required.");
     return;
   }
@@ -233,4 +366,36 @@ startBtn.addEventListener("click", startTracking);
 stopBtn.addEventListener("click", stopTracking);
 unlockBtn.addEventListener("click", unlockDriver);
 
+[busIdEl, sourceEl, destinationEl].forEach((field) => {
+  field.addEventListener("input", () => {
+    if (field === busIdEl) {
+      field.value = normalizeText(field.value, MAX_BUS_ID_LEN);
+    } else {
+      field.value = normalizeText(field.value);
+    }
+    saveFormState();
+    setControlState();
+  });
+});
+
+window.addEventListener("online", () => {
+  if (watchId !== null) {
+    setStatus("Online. Uploading live GPS...");
+  }
+});
+
+window.addEventListener("offline", () => {
+  setStatus("You are offline. GPS uploads will retry when internet returns.");
+});
+
+window.addEventListener("beforeunload", (event) => {
+  if (watchId === null) {
+    return;
+  }
+  event.preventDefault();
+  event.returnValue = "";
+});
+
+restoreFormState();
+restoreSessionState();
 setControlState();

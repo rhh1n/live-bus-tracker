@@ -55,6 +55,32 @@ function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+function formatRelativeAge(iso) {
+  const ts = new Date(iso).getTime();
+  if (!Number.isFinite(ts)) {
+    return "now";
+  }
+  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) {
+    return `${mins}m`;
+  }
+  const hours = Math.floor(mins / 60);
+  return `${hours}h`;
+}
+
+function escapeHtml(value) {
+  return `${value ?? ""}`
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function distanceKm(aLat, aLng, bLat, bLng) {
   const R = 6371;
   const toRad = (v) => (v * Math.PI) / 180;
@@ -118,12 +144,19 @@ function upsertBus(bus) {
   const source = bus.source || "Unknown";
   const destination = bus.destination || "Unknown";
   const currentLocation = getCurrentLocationLabel(bus);
+  const busIdSafe = escapeHtml(bus.id || "Unknown");
+  const sourceSafe = escapeHtml(source);
+  const destinationSafe = escapeHtml(destination);
+  const currentLocationSafe = escapeHtml(currentLocation);
+  const distToUserSafe = escapeHtml(distToUser);
+  const gpsUpdateSafe = escapeHtml(formatTime(bus.lastUpdated));
+  const updatedAgoSafe = escapeHtml(formatRelativeAge(bus.lastUpdated));
   const text =
-    `<strong>Bus ${bus.id}</strong><br/>` +
-    `Trip: ${source} -> ${destination}<br/>` +
-    `Current location: ${currentLocation}<br/>` +
-    `From you: ${distToUser}<br/>` +
-    `GPS update: ${formatTime(bus.lastUpdated)}`;
+    `<strong>Bus ${busIdSafe}</strong><br/>` +
+    `Trip: ${sourceSafe} -> ${destinationSafe}<br/>` +
+    `Current location: ${currentLocationSafe}<br/>` +
+    `From you: ${distToUserSafe}<br/>` +
+    `GPS update: ${gpsUpdateSafe} (${updatedAgoSafe} ago)`;
 
   if (!busMarkers.has(bus.id)) {
     const marker = L.marker([bus.lat, bus.lng]).addTo(map);
@@ -165,12 +198,13 @@ function renderArrivals(buses) {
     const source = bus.source || "Unknown";
     const destination = bus.destination || "Unknown";
     const currentLocation = getCurrentLocationLabel(bus);
+    const updatedAgo = formatRelativeAge(bus.lastUpdated);
     card.innerHTML = `
-      <div><strong>Bus ${bus.id}</strong><span class="badge bus">Live</span></div>
-      <div class="meta">Trip: ${source} -> ${destination}</div>
-      <div class="meta">Current location: ${currentLocation}</div>
-      <div class="meta">Distance from you: ${userDistance}</div>
-      <div class="meta">GPS update: ${formatTime(bus.lastUpdated)}</div>
+      <div><strong>Bus ${escapeHtml(bus.id || "Unknown")}</strong><span class="badge bus">Live</span></div>
+      <div class="meta">Trip: ${escapeHtml(source)} -> ${escapeHtml(destination)}</div>
+      <div class="meta">Current location: ${escapeHtml(currentLocation)}</div>
+      <div class="meta">Distance from you: ${escapeHtml(userDistance)}</div>
+      <div class="meta">GPS update: ${escapeHtml(formatTime(bus.lastUpdated))} (${escapeHtml(updatedAgo)} ago)</div>
     `;
     host.appendChild(card);
   });
