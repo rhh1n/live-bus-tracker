@@ -9,7 +9,7 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const DRIVER_API_KEY = process.env.DRIVER_API_KEY || "change-this-driver-key";
-const DRIVER_LOGIN_PIN = process.env.DRIVER_LOGIN_PIN || "1234";
+const DRIVER_LOGIN_PIN = "13579";
 const ENABLE_SIMULATION = process.env.ENABLE_SIMULATION === "true";
 const STALE_AFTER_MS = Math.max(5000, Number(process.env.BUS_STALE_AFTER_MS) || 15 * 1000);
 const DRIVER_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;

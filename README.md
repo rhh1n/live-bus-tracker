@@ -19,7 +19,7 @@ This project is now structured for real deployments:
 4. Set driver API key (PowerShell):
    `$env:DRIVER_API_KEY="your-strong-key"`
 5. Set driver login PIN (PowerShell):
-   `$env:DRIVER_LOGIN_PIN="2468"`
+   `$env:DRIVER_LOGIN_PIN="13579"`
 6. Start server:
    `npm start`
 7. Open:
@@ -105,7 +105,7 @@ Use HTTPS hosting so mobile location permissions work.
 4. Render auto-detects `render.yaml`.
 5. Set secret env var:
    - `DRIVER_API_KEY=your-strong-key`
-   - `DRIVER_LOGIN_PIN=2468`
+   - `DRIVER_LOGIN_PIN=13579`
    - `BUS_STALE_AFTER_MS=15000`
 6. Deploy and open the generated `https://...onrender.com` URL on mobile.
 
@@ -114,7 +114,7 @@ Use HTTPS hosting so mobile location permissions work.
 2. In Railway, `New Project` -> `Deploy from GitHub repo`.
 3. Add env vars:
    - `DRIVER_API_KEY=your-strong-key`
-   - `DRIVER_LOGIN_PIN=2468`
+   - `DRIVER_LOGIN_PIN=13579`
    - `ENABLE_SIMULATION=false`
    - `BUS_STALE_AFTER_MS=15000`
 4. Deploy and open the public HTTPS URL on mobile.
