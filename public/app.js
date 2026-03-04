@@ -21,6 +21,8 @@ const locationStatusEl = document.getElementById("location-status");
 let userLocation = null;
 let userMarker = null;
 let backendOnline = false;
+let passengerTrackingInterval = null;
+let locationPollInFlight = false;
 
 function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -127,7 +129,7 @@ function renderArrivals(buses) {
 
 function setUserLocation(lat, lng) {
   userLocation = { lat, lng };
-  locationStatusEl.textContent = `Using your location: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  locationStatusEl.textContent = `Tracking your location: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   if (!hasLeaflet) {
     return;
   }
@@ -144,6 +146,47 @@ function setUserLocation(lat, lng) {
     userMarker.setLatLng([lat, lng]);
   }
   map.setView([lat, lng], 14);
+}
+
+function requestPassengerLocationUpdate() {
+  if (!navigator.geolocation || locationPollInFlight) {
+    return;
+  }
+
+  locationPollInFlight = true;
+  navigator.geolocation.getCurrentPosition(
+    (p) => {
+      locationPollInFlight = false;
+      setUserLocation(p.coords.latitude, p.coords.longitude);
+      if (backendOnline) fetchLiveBuses().catch(() => {});
+    },
+    () => {
+      locationPollInFlight = false;
+      locationStatusEl.textContent = "Location permission denied or unavailable.";
+      stopPassengerLocationTracking();
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+
+function startPassengerLocationTracking() {
+  if (passengerTrackingInterval) {
+    return;
+  }
+  locationStatusEl.textContent = "Starting live passenger tracking...";
+  requestPassengerLocationUpdate();
+  passengerTrackingInterval = setInterval(requestPassengerLocationUpdate, 1000);
+  locateBtn.textContent = "Stop tracking";
+}
+
+function stopPassengerLocationTracking() {
+  if (!passengerTrackingInterval) {
+    return;
+  }
+  clearInterval(passengerTrackingInterval);
+  passengerTrackingInterval = null;
+  locationPollInFlight = false;
+  locateBtn.textContent = "Use my location";
 }
 
 async function loadStops() {
@@ -233,17 +276,11 @@ locateBtn.addEventListener("click", () => {
     locationStatusEl.textContent = "Geolocation not supported in this browser.";
     return;
   }
-  locationStatusEl.textContent = "Getting your location...";
-  navigator.geolocation.getCurrentPosition(
-    (p) => {
-      setUserLocation(p.coords.latitude, p.coords.longitude);
-      if (backendOnline) fetchLiveBuses().catch(() => {});
-    },
-    () => {
-      locationStatusEl.textContent = "Location permission denied or unavailable.";
-    },
-    { enableHighAccuracy: true, timeout: 10000 }
-  );
+  if (passengerTrackingInterval) {
+    stopPassengerLocationTracking();
+    return;
+  }
+  startPassengerLocationTracking();
 });
 
 radiusSelect.addEventListener("change", () => {
@@ -260,3 +297,7 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/service-worker.js").catch(() => {});
   });
 }
+
+window.addEventListener("beforeunload", () => {
+  stopPassengerLocationTracking();
+});
