@@ -25,10 +25,13 @@ let backendOnline = false;
 let passengerWatchId = null;
 let hasCenteredOnUser = false;
 let manualPickMode = false;
+let coarseFixCount = 0;
+let hasReliableFix = false;
 
 const COARSE_LOCATION_LIMIT_M = 3000;
 const HIGH_ACCURACY_M = 120;
 const APPROXIMATE_ACCURACY_M = 1000;
+const COARSE_FIX_RETRY_LIMIT = 3;
 
 function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -77,6 +80,16 @@ function upsertStop(stop) {
   }).addTo(map);
   marker.bindPopup(`<strong>${stop.name}</strong><br/><span>Bus Stand</span>`);
   stopMarkers.set(stop.id, marker);
+}
+
+function focusMapOnServiceArea(busStops) {
+  if (!hasLeaflet || !Array.isArray(busStops) || !busStops.length || userLocation) {
+    return;
+  }
+  const bounds = L.latLngBounds(busStops.map((stop) => [stop.lat, stop.lng]));
+  if (bounds.isValid()) {
+    map.fitBounds(bounds.pad(0.2), { maxZoom: 14 });
+  }
 }
 
 function upsertBus(bus) {
@@ -137,6 +150,9 @@ function renderArrivals(buses) {
 
 function setUserLocation(lat, lng, accuracyMeters = null, source = "gps") {
   userLocation = { lat, lng };
+  if (source === "gps" || source === "manual") {
+    hasReliableFix = true;
+  }
   const accuracyKnown = Number.isFinite(accuracyMeters);
   const accuracySuffix = accuracyKnown ? ` (+-${Math.round(accuracyMeters)} m)` : "";
 
@@ -195,15 +211,21 @@ function startPassengerLocationTracking() {
     return;
   }
   manualPickMode = false;
+  coarseFixCount = 0;
   manualLocateBtn.textContent = "Set on map";
   locationStatusEl.textContent = "Waiting for accurate GPS fix...";
   passengerWatchId = navigator.geolocation.watchPosition(
     (p) => {
       const accuracy = p.coords.accuracy;
       if (Number.isFinite(accuracy) && accuracy > COARSE_LOCATION_LIMIT_M) {
-        locationStatusEl.textContent = `Location is too coarse (+-${Math.round(accuracy)} m). Move outdoors or use "Set on map".`;
+        coarseFixCount += 1;
+        locationStatusEl.textContent = `Location is too coarse (~${(accuracy / 1000).toFixed(1)} km). Move outdoors or use "Set on map".`;
+        if (!hasReliableFix && coarseFixCount >= COARSE_FIX_RETRY_LIMIT) {
+          stopPassengerLocationTracking({ keepStatusText: true });
+        }
         return;
       }
+      coarseFixCount = 0;
       setUserLocation(p.coords.latitude, p.coords.longitude, accuracy, "gps");
       if (backendOnline) fetchLiveBuses().catch(() => {});
     },
@@ -261,6 +283,7 @@ async function loadStops() {
   if (!res.ok) throw new Error("stops failed");
   const data = await res.json();
   data.busStops.forEach(upsertStop);
+  focusMapOnServiceArea(data.busStops);
 }
 
 async function fetchLiveBuses() {
@@ -285,6 +308,9 @@ async function fetchLiveBuses() {
 
 async function bootstrapOnlineMode() {
   await loadStops();
+  if (hasLeaflet) {
+    setTimeout(() => map.invalidateSize(), 150);
+  }
   await fetchLiveBuses();
   backendOnline = true;
   if (typeof io === "function") {

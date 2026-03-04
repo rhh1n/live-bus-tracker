@@ -1,4 +1,4 @@
-const CACHE = "live-bus-tracker-passenger-v1";
+const CACHE = "live-bus-tracker-passenger-v2";
 const STATIC_ASSETS = [
   "/passenger",
   "/passenger/index.html",
