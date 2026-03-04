@@ -38,6 +38,8 @@ let userLocation = null;
 let userMarker = null;
 let backendOnline = false;
 let passengerWatchId = null;
+let passengerPollIntervalId = null;
+let passengerGeoPollInFlight = false;
 let hasCenteredOnUser = false;
 let manualPickMode = false;
 let coarseFixCount = 0;
@@ -47,6 +49,7 @@ const COARSE_LOCATION_LIMIT_M = 3000;
 const HIGH_ACCURACY_M = 120;
 const APPROXIMATE_ACCURACY_M = 1000;
 const COARSE_FIX_RETRY_LIMIT = 3;
+const PASSENGER_UPDATE_INTERVAL_MS = 2000;
 
 function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -224,6 +227,41 @@ function resolveGeolocationError(error) {
   return "Location permission denied or unavailable.";
 }
 
+function handlePassengerPosition(position) {
+  const accuracy = position.coords.accuracy;
+  if (Number.isFinite(accuracy) && accuracy > COARSE_LOCATION_LIMIT_M) {
+    coarseFixCount += 1;
+    locationStatusEl.textContent = `Location is too coarse (~${(accuracy / 1000).toFixed(1)} km). Move outdoors or use "Set on map".`;
+    if (!hasReliableFix && coarseFixCount >= COARSE_FIX_RETRY_LIMIT) {
+      stopPassengerLocationTracking({ keepStatusText: true });
+    }
+    return;
+  }
+  coarseFixCount = 0;
+  setUserLocation(position.coords.latitude, position.coords.longitude, accuracy, "gps");
+  if (backendOnline) fetchLiveBuses().catch(() => {});
+}
+
+function pollPassengerPositionOnce() {
+  if (!navigator.geolocation || passengerGeoPollInFlight) {
+    return;
+  }
+  passengerGeoPollInFlight = true;
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      passengerGeoPollInFlight = false;
+      handlePassengerPosition(position);
+    },
+    (err) => {
+      passengerGeoPollInFlight = false;
+      if (!hasReliableFix) {
+        locationStatusEl.textContent = resolveGeolocationError(err);
+      }
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
 function startPassengerLocationTracking() {
   if (passengerWatchId !== null || !navigator.geolocation) {
     return;
@@ -231,28 +269,17 @@ function startPassengerLocationTracking() {
   manualPickMode = false;
   coarseFixCount = 0;
   manualLocateBtn.textContent = "Set on map";
-  locationStatusEl.textContent = "Waiting for accurate GPS fix...";
+  locationStatusEl.textContent = "Waiting for accurate GPS fix... Updates every 2s.";
+  pollPassengerPositionOnce();
   passengerWatchId = navigator.geolocation.watchPosition(
-    (p) => {
-      const accuracy = p.coords.accuracy;
-      if (Number.isFinite(accuracy) && accuracy > COARSE_LOCATION_LIMIT_M) {
-        coarseFixCount += 1;
-        locationStatusEl.textContent = `Location is too coarse (~${(accuracy / 1000).toFixed(1)} km). Move outdoors or use "Set on map".`;
-        if (!hasReliableFix && coarseFixCount >= COARSE_FIX_RETRY_LIMIT) {
-          stopPassengerLocationTracking({ keepStatusText: true });
-        }
-        return;
-      }
-      coarseFixCount = 0;
-      setUserLocation(p.coords.latitude, p.coords.longitude, accuracy, "gps");
-      if (backendOnline) fetchLiveBuses().catch(() => {});
-    },
+    (p) => handlePassengerPosition(p),
     (err) => {
       locationStatusEl.textContent = resolveGeolocationError(err);
       stopPassengerLocationTracking({ keepStatusText: true });
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
+  passengerPollIntervalId = setInterval(pollPassengerPositionOnce, PASSENGER_UPDATE_INTERVAL_MS);
   locateBtn.textContent = "Stop tracking";
 }
 
@@ -262,6 +289,11 @@ function stopPassengerLocationTracking(options = {}) {
     navigator.geolocation.clearWatch(passengerWatchId);
     passengerWatchId = null;
   }
+  if (passengerPollIntervalId !== null) {
+    clearInterval(passengerPollIntervalId);
+    passengerPollIntervalId = null;
+  }
+  passengerGeoPollInFlight = false;
   locateBtn.textContent = "Use my location";
   if (keepStatusText) {
     return;

@@ -12,6 +12,10 @@ const logEl = document.getElementById("driver-log");
 let watchId = null;
 let sendInFlight = false;
 let driverToken = null;
+let latestPosition = null;
+let uploadIntervalId = null;
+let firstFixSent = false;
+const DRIVER_UPLOAD_INTERVAL_MS = 2000;
 
 function formatClock(dateLike = new Date()) {
   const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
@@ -175,9 +179,16 @@ function startTracking() {
   }
 
   setStatus("Requesting GPS permission...");
+  latestPosition = null;
+  firstFixSent = false;
+
   watchId = navigator.geolocation.watchPosition(
     (position) => {
-      sendLocation(position);
+      latestPosition = position;
+      if (!firstFixSent) {
+        sendLocation(position);
+        firstFixSent = true;
+      }
     },
     (error) => {
       const message = resolveGeolocationError(error);
@@ -191,8 +202,13 @@ function startTracking() {
       timeout: 15000
     }
   );
+  uploadIntervalId = setInterval(() => {
+    if (latestPosition) {
+      sendLocation(latestPosition);
+    }
+  }, DRIVER_UPLOAD_INTERVAL_MS);
   setControlState();
-  setStatus("Waiting for first GPS fix...");
+  setStatus("Waiting for first GPS fix... Updates every 2s.");
 }
 
 function stopTracking(options = {}) {
@@ -201,6 +217,12 @@ function stopTracking(options = {}) {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
   }
+  if (uploadIntervalId !== null) {
+    clearInterval(uploadIntervalId);
+    uploadIntervalId = null;
+  }
+  latestPosition = null;
+  firstFixSent = false;
   setControlState();
   if (!keepStatusText) {
     setStatus("Tracking stopped.");
