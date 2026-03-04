@@ -79,39 +79,6 @@ const busStops = [
   { id: "stop-4", name: "Railway Junction", lat: 12.9665, lng: 77.5881 }
 ];
 
-const seedBuses = [
-  {
-    id: "bus-101",
-    routeNo: "101",
-    source: "Central Bus Stand",
-    destination: "Railway Junction",
-    lat: 12.973,
-    lng: 77.591,
-    speedKmph: 26,
-    headingDeg: 65
-  },
-  {
-    id: "bus-224",
-    routeNo: "224",
-    source: "Market Circle",
-    destination: "City Hospital",
-    lat: 12.969,
-    lng: 77.597,
-    speedKmph: 22,
-    headingDeg: 130
-  },
-  {
-    id: "bus-308",
-    routeNo: "308",
-    source: "City Hospital Stop",
-    destination: "Market Circle",
-    lat: 12.9675,
-    lng: 77.5905,
-    speedKmph: 20,
-    headingDeg: 25
-  }
-];
-
 const busState = new Map();
 const driverTokens = new Map();
 const busLocationHistory = new Map();
@@ -143,15 +110,6 @@ function getBusHistory(busId, limit = 6) {
   const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
   return history.slice(-safeLimit).reverse();
 }
-
-seedBuses.forEach((bus) => {
-  busState.set(bus.id, {
-    ...bus,
-    provider: "seed",
-    lastUpdated: new Date().toISOString()
-  });
-  appendBusHistory(busState.get(bus.id));
-});
 
 function toRad(value) {
   return (value * Math.PI) / 180;

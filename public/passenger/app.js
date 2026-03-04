@@ -368,75 +368,6 @@ async function bootstrapOnlineMode() {
   setInterval(() => fetchLiveBuses().catch(() => {}), 15000);
 }
 
-function runOfflineDemo() {
-  const busStops = [
-    { id: "stop-1", name: "Central Bus Stand", lat: 12.9719, lng: 77.5938 },
-    { id: "stop-2", name: "Market Circle", lat: 12.9755, lng: 77.5993 },
-    { id: "stop-3", name: "City Hospital Stop", lat: 12.9682, lng: 77.6012 },
-    { id: "stop-4", name: "Railway Junction", lat: 12.9665, lng: 77.5881 }
-  ];
-  const buses = [
-    {
-      id: "bus-101",
-      routeNo: "101",
-      source: "Central Bus Stand",
-      destination: "Railway Junction",
-      lat: 12.973,
-      lng: 77.591,
-      headingDeg: 65
-    },
-    {
-      id: "bus-224",
-      routeNo: "224",
-      source: "Market Circle",
-      destination: "City Hospital",
-      lat: 12.969,
-      lng: 77.597,
-      headingDeg: 130
-    },
-    {
-      id: "bus-308",
-      routeNo: "308",
-      source: "City Hospital Stop",
-      destination: "Market Circle",
-      lat: 12.9675,
-      lng: 77.5905,
-      headingDeg: 25
-    }
-  ];
-  busStops.forEach(upsertStop);
-
-  function tick() {
-    buses.forEach((bus) => {
-      const step = 0.00035;
-      const h = (bus.headingDeg * Math.PI) / 180;
-      bus.lat += step * Math.cos(h);
-      bus.lng += step * Math.sin(h);
-      if (Math.random() < 0.08) bus.headingDeg = (bus.headingDeg + (Math.random() - 0.5) * 60 + 360) % 360;
-    });
-
-    const payload = buses.map((b) => ({
-      ...b,
-      distanceToUserKm: userLocation ? Number(distanceKm(userLocation.lat, userLocation.lng, b.lat, b.lng).toFixed(2)) : null,
-      nearestStop: nearestStop(b, busStops),
-      lastUpdated: new Date().toISOString(),
-      updateHistory: [new Date().toISOString()]
-    }));
-
-    const ids = new Set();
-    payload.forEach((bus) => {
-      ids.add(bus.id);
-      upsertBus(bus);
-    });
-    clearOldBusMarkers(ids);
-    renderArrivals(payload);
-    lastUpdatedEl.textContent = `Last updated: ${formatTime(new Date().toISOString())} (offline demo mode)`;
-  }
-
-  tick();
-  setInterval(tick, 3000);
-}
-
 locateBtn.addEventListener("click", () => {
   if (!navigator.geolocation) {
     locationStatusEl.textContent = "Geolocation not supported in this browser.";
@@ -470,8 +401,10 @@ radiusSelect.addEventListener("change", () => {
 });
 
 bootstrapOnlineMode().catch(() => {
-  locationStatusEl.textContent = "Server not reachable. Running offline demo mode.";
-  runOfflineDemo();
+  locationStatusEl.textContent = "Server not reachable. Waiting for live buses from backend.";
+  lastUpdatedEl.textContent = "Last updated: Waiting for server...";
+  renderArrivals([]);
+  clearOldBusMarkers(new Set());
 });
 
 if ("serviceWorker" in navigator) {

@@ -31,6 +31,7 @@ This project is now structured for real deployments:
 - Click `Use my location`
 - App queries `/api/buses/live?lat=...&lng=...&radiusKm=...`
 - Passenger radius is selectable up to `50 km` (default `50 km`)
+- No default/seed buses are shown; buses appear only from live driver GPS uploads
 - Arrivals panel shows nearest live buses and ETA
 
 ## Driver Mobile Page (Real GPS)
@@ -85,12 +86,6 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/driver/location" 
 - `GET /api/buses/history?busId=<id>&limit=<n>`
 - `POST /api/driver/login` (requires PIN)
 - `POST /api/driver/location` (requires `x-driver-token` or `x-api-key`)
-
-## Optional Local Simulation
-If you want seed buses moving without driver data:
-- PowerShell:
-  `$env:ENABLE_SIMULATION="true"`
-- Then run `npm start`
 
 ## Production Next Steps
 - Replace in-memory state with Redis/PostgreSQL.
