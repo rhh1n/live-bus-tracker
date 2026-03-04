@@ -328,6 +328,18 @@ function toggleManualPickMode() {
   locationStatusEl.textContent = "Tap on the map to set your exact location.";
 }
 
+function autoStartPassengerLocation() {
+  if (!navigator.geolocation) {
+    locationStatusEl.textContent = "Geolocation not supported in this browser.";
+    return;
+  }
+  if (passengerWatchId !== null) {
+    return;
+  }
+  locationStatusEl.textContent = "Starting live location...";
+  startPassengerLocationTracking();
+}
+
 async function loadStops() {
   const res = await fetch("/api/stops");
   if (!res.ok) throw new Error("stops failed");
@@ -406,6 +418,8 @@ bootstrapOnlineMode().catch(() => {
   renderArrivals([]);
   clearOldBusMarkers(new Set());
 });
+
+autoStartPassengerLocation();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
