@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0057d9" />
   <title>Driver GPS Uploader</title>
   <link rel="stylesheet" href="/driver/styles.css" />
@@ -31,16 +31,16 @@
       </div>
       <div class="form-grid">
         <label>Bus ID
-          <input id="bus-id" type="text" value="bus-101" />
+          <input id="bus-id" type="text" value="bus-101" autocomplete="off" autocapitalize="off" />
         </label>
         <label>Route No
-          <input id="route-no" type="text" value="101" />
+          <input id="route-no" type="text" value="101" inputmode="numeric" autocomplete="off" />
         </label>
         <label>Destination
-          <input id="destination" type="text" value="Railway Junction" />
+          <input id="destination" type="text" value="Railway Junction" autocomplete="street-address" />
         </label>
         <label>Driver PIN
-          <input id="driver-pin" type="password" placeholder="Enter PIN" />
+          <input id="driver-pin" type="password" placeholder="Enter PIN" inputmode="numeric" autocomplete="one-time-code" />
         </label>
       </div>
 

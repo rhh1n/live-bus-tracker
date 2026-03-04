@@ -32,6 +32,7 @@
 html,
 body {
   min-height: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 h1,
@@ -52,6 +53,8 @@ body.page {
     linear-gradient(150deg, var(--bg-0), var(--bg-1) 52%, var(--bg-2));
   overflow-x: hidden;
   position: relative;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 body.page::before {
@@ -201,7 +204,7 @@ h1 {
 .layout {
   display: grid;
   gap: 1rem;
-  padding-bottom: 1.45rem;
+  padding-bottom: calc(1.45rem + env(safe-area-inset-bottom));
 }
 
 .passenger-layout {
@@ -291,6 +294,7 @@ button,
 select,
 input {
   font: inherit;
+  touch-action: manipulation;
 }
 
 #locate-btn,
@@ -645,6 +649,15 @@ input {
 
   .hero-nav {
     margin-top: 0.2rem;
+    width: 100%;
+  }
+
+  .nav-chip {
+    flex: 1 1 0;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .panel-title,
@@ -660,8 +673,16 @@ input {
   }
 
   #map {
-    min-height: 300px;
-    height: 50vh;
+    min-height: 280px;
+    height: 46svh;
+  }
+
+  .passenger-layout .list-panel {
+    order: 1;
+  }
+
+  .passenger-layout .map-panel {
+    order: 2;
   }
 
   .form-grid {
@@ -674,11 +695,37 @@ input {
   #start-btn,
   #stop-btn {
     width: 100%;
+    min-height: 46px;
+    font-size: 0.98rem;
+  }
+
+  .form-grid input {
+    font-size: 16px;
+    min-height: 46px;
   }
 
   .select-shell {
     width: 100%;
     justify-content: space-between;
+    min-height: 46px;
+  }
+
+  #radius-select {
+    font-size: 16px;
+    min-height: 40px;
+  }
+
+  .status-line {
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+
+  .arrival-card {
+    padding: 0.84rem;
+  }
+
+  .meta {
+    line-height: 1.4;
   }
 }
 

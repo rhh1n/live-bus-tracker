@@ -11,6 +11,21 @@ if (hasLeaflet) {
   mapHost.innerHTML = "<div style='padding:12px;color:#6c7a90'>Map unavailable (internet blocked). Arrivals list still works.</div>";
 }
 
+function refreshMapLayout(delayMs = 80) {
+  if (!hasLeaflet) {
+    return;
+  }
+  setTimeout(() => {
+    map.invalidateSize();
+  }, delayMs);
+}
+
+if (hasLeaflet) {
+  window.addEventListener("resize", () => refreshMapLayout(90));
+  window.addEventListener("orientationchange", () => refreshMapLayout(240));
+  window.addEventListener("pageshow", () => refreshMapLayout(120));
+}
+
 const busMarkers = new Map();
 const stopMarkers = new Map();
 const locateBtn = document.getElementById("locate-btn");
@@ -308,9 +323,7 @@ async function fetchLiveBuses() {
 
 async function bootstrapOnlineMode() {
   await loadStops();
-  if (hasLeaflet) {
-    setTimeout(() => map.invalidateSize(), 150);
-  }
+  refreshMapLayout(150);
   await fetchLiveBuses();
   backendOnline = true;
   if (typeof io === "function") {
