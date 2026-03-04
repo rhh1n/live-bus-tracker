@@ -1,4 +1,4 @@
-const CACHE = "live-bus-tracker-v6";
+const CACHE = "live-bus-tracker-v7";
 const STATIC_ASSETS = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

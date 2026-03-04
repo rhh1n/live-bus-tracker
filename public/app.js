@@ -114,12 +114,14 @@ function renderArrivals(buses) {
   const host = document.getElementById("arrivals");
   host.innerHTML = "";
   if (!buses.length) {
-    host.innerHTML = '<article class="arrival-card"><div class="meta">No live buses found for selected radius.</div></article>';
+    host.innerHTML =
+      '<article class="arrival-card" style="--stagger-index:0"><div class="meta">No live buses found for selected radius.</div></article>';
     return;
   }
-  buses.forEach((bus) => {
+  buses.forEach((bus, index) => {
     const card = document.createElement("article");
     card.className = "arrival-card";
+    card.style.setProperty("--stagger-index", String(index));
     const userDistance = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
     card.innerHTML = `
       <div><strong>Route ${bus.routeNo}</strong><span class="badge bus">Live</span></div>
