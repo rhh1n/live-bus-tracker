@@ -82,6 +82,7 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/driver/location" 
 - `GET /api/health`
 - `GET /api/stops`
 - `GET /api/buses/live?lat=<lat>&lng=<lng>&radiusKm=<km>`
+- `GET /api/buses/history?busId=<id>&limit=<n>`
 - `POST /api/driver/login` (requires PIN)
 - `POST /api/driver/location` (requires `x-driver-token` or `x-api-key`)
 

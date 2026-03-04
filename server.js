@@ -16,6 +16,7 @@ const DRIVER_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MIN_RADIUS_KM = 0.1;
 const DEFAULT_RADIUS_KM = 50;
 const MAX_RADIUS_KM = 50;
+const LOCATION_HISTORY_LIMIT = 120;
 const PASSENGER_WEB_ROOT = path.join(__dirname, "public", "passenger");
 const DRIVER_WEB_ROOT = path.join(__dirname, "public", "driver");
 
@@ -113,12 +114,43 @@ const seedBuses = [
 
 const busState = new Map();
 const driverTokens = new Map();
+const busLocationHistory = new Map();
+
+function appendBusHistory(bus) {
+  if (!bus?.id || !bus?.lastUpdated) {
+    return;
+  }
+  const history = busLocationHistory.get(bus.id) || [];
+  const latest = history[history.length - 1];
+  if (latest?.updatedAt === bus.lastUpdated) {
+    return;
+  }
+  history.push({
+    updatedAt: bus.lastUpdated,
+    lat: bus.lat,
+    lng: bus.lng,
+    source: bus.source || null,
+    destination: bus.destination || null
+  });
+  if (history.length > LOCATION_HISTORY_LIMIT) {
+    history.splice(0, history.length - LOCATION_HISTORY_LIMIT);
+  }
+  busLocationHistory.set(bus.id, history);
+}
+
+function getBusHistory(busId, limit = 6) {
+  const history = busLocationHistory.get(busId) || [];
+  const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+  return history.slice(-safeLimit).reverse();
+}
+
 seedBuses.forEach((bus) => {
   busState.set(bus.id, {
     ...bus,
     provider: "seed",
     lastUpdated: new Date().toISOString()
   });
+  appendBusHistory(busState.get(bus.id));
 });
 
 function toRad(value) {
@@ -187,7 +219,8 @@ function listLiveBuses() {
     .filter((bus) => now - new Date(bus.lastUpdated).getTime() <= STALE_AFTER_MS)
     .map((bus) => ({
       ...bus,
-      nearestStop: getNearestStop(bus.lat, bus.lng, bus.speedKmph)
+      nearestStop: getNearestStop(bus.lat, bus.lng, bus.speedKmph),
+      updateHistory: getBusHistory(bus.id, 6).map((entry) => entry.updatedAt)
     }));
 }
 
@@ -255,6 +288,20 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/stops", (_req, res) => {
   res.json({ busStops });
+});
+
+app.get("/api/buses/history", (req, res) => {
+  const busId = `${req.query.busId || ""}`.trim();
+  if (!busId) {
+    return res.status(400).json({ error: "busId query param is required" });
+  }
+  const limit = Math.min(100, Math.max(1, toNumber(req.query.limit) || 20));
+  const history = getBusHistory(busId, limit);
+  return res.json({
+    busId,
+    count: history.length,
+    history
+  });
 });
 
 app.post("/api/driver/login", (req, res) => {
@@ -329,6 +376,7 @@ app.post("/api/driver/location", requireDriverAuth, (req, res) => {
   };
 
   busState.set(busId, payload);
+  appendBusHistory(payload);
   io.emit("bus:update", buildPayload());
 
   return res.status(202).json({
@@ -354,6 +402,7 @@ if (ENABLE_SIMULATION) {
       moveBus(bus);
       bus.lastUpdated = new Date().toISOString();
       busState.set(bus.id, bus);
+      appendBusHistory(bus);
     });
     io.emit("bus:update", buildPayload());
   }, 3000);
