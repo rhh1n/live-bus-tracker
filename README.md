@@ -4,6 +4,7 @@ This project is now structured for real deployments:
 - Passengers see live buses in browser map
 - Drivers (or bus GPS devices) push coordinates to backend
 - Backend broadcasts updates via Socket.IO and serves nearby-bus APIs
+- Passenger and driver UIs are isolated into separate frontend routes
 
 ## Stack
 - Node.js + Express
@@ -22,7 +23,9 @@ This project is now structured for real deployments:
 6. Start server:
    `npm start`
 7. Open:
-   `http://localhost:3000`
+   - Passenger: `http://localhost:3000/passenger`
+   - Driver: `http://localhost:3000/driver`
+   - Root redirects to passenger route
 
 ## Passenger Flow
 - Click `Use my location`
@@ -38,7 +41,14 @@ This project is now structured for real deployments:
 - Tap `Unlock Driver`
 - Tap `Start Live Tracking`
 - The page continuously uploads GPS to `/api/driver/location`
-- Passenger page `https://<your-domain>/` will show the bus live
+- Passenger page `https://<your-domain>/passenger` will show the bus live
+
+## Frontend Separation (Production-Friendly)
+- Passenger web app is served from `/passenger`
+- Driver web app is served from `/driver`
+- Passenger service worker is scoped only to `/passenger/`
+- Driver web assets are served with `Cache-Control: no-store`
+- Legacy root service worker path (`/service-worker.js`) is retired automatically
 
 ## Driver / GPS Device API
 Endpoint:
@@ -112,6 +122,6 @@ Use HTTPS hosting so mobile location permissions work.
 
 ## Install As Mobile App (PWA)
 After deployment:
-- Open your URL in mobile browser.
+- Open `https://<your-domain>/passenger` in mobile browser.
 - Chrome Android: menu -> `Add to Home screen`.
 - iPhone Safari: share -> `Add to Home Screen`.

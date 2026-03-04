@@ -1,7 +1,9 @@
 {
   "name": "Live Bus Tracker",
   "short_name": "BusTracker",
-  "start_url": "/",
+  "id": "/passenger",
+  "start_url": "/passenger",
+  "scope": "/passenger/",
   "display": "standalone",
   "background_color": "#f5f7fb",
   "theme_color": "#0057d9",

@@ -1,5 +1,11 @@
-const CACHE = "live-bus-tracker-v7";
-const STATIC_ASSETS = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest"];
+const CACHE = "live-bus-tracker-passenger-v1";
+const STATIC_ASSETS = [
+  "/passenger",
+  "/passenger/index.html",
+  "/passenger/styles.css",
+  "/passenger/app.js",
+  "/passenger/manifest.webmanifest"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(STATIC_ASSETS)));
@@ -23,6 +29,6 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE).then((cache) => cache.put(event.request, cloned)).catch(() => {});
         return res;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/index.html")))
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/passenger/index.html")))
   );
 });

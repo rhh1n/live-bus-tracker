@@ -377,7 +377,25 @@ bootstrapOnlineMode().catch(() => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => {
+        registrations.forEach((registration) => {
+          try {
+            const scopePath = new URL(registration.scope).pathname;
+            if (scopePath === "/") {
+              registration.unregister().catch(() => {});
+            }
+          } catch (_err) {
+            // ignore invalid scope URL parsing
+          }
+        });
+      })
+      .catch(() => {});
+
+    navigator.serviceWorker
+      .register("/passenger/service-worker.js", { scope: "/passenger/" })
+      .catch(() => {});
   });
 }
 

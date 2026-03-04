@@ -16,12 +16,59 @@ const DRIVER_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MIN_RADIUS_KM = 0.1;
 const DEFAULT_RADIUS_KM = 50;
 const MAX_RADIUS_KM = 50;
+const PASSENGER_WEB_ROOT = path.join(__dirname, "public", "passenger");
+const DRIVER_WEB_ROOT = path.join(__dirname, "public", "driver");
 
 app.use(express.json());
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
+
+app.use("/passenger", express.static(PASSENGER_WEB_ROOT));
+app.use(
+  "/driver",
+  (req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  },
+  express.static(DRIVER_WEB_ROOT)
+);
+
+app.get("/", (_req, res) => {
+  res.redirect(302, "/passenger");
+});
+
+app.get("/passenger", (_req, res) => {
+  res.sendFile(path.join(PASSENGER_WEB_ROOT, "index.html"));
+});
+
 app.get("/driver", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "driver.html"));
+  res.setHeader("Cache-Control", "no-store");
+  res.sendFile(path.join(DRIVER_WEB_ROOT, "index.html"));
+});
+
+app.get("/service-worker.js", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.type("application/javascript").send(`
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+      await self.registration.unregister();
+      const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+      clients.forEach((client) => client.navigate(client.url));
+    })()
+  );
+});
+  `);
 });
 
 const busStops = [
@@ -314,6 +361,8 @@ setInterval(() => {
 
 server.listen(PORT, () => {
   console.log(`Live bus tracker running on http://localhost:${PORT}`);
+  console.log(`Passenger web app: http://localhost:${PORT}/passenger`);
+  console.log(`Driver web app: http://localhost:${PORT}/driver`);
   console.log(`Simulation mode: ${ENABLE_SIMULATION ? "ON" : "OFF"}`);
   console.log("Driver API endpoint: POST /api/driver/location");
 });
