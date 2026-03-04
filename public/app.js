@@ -21,8 +21,8 @@ const locationStatusEl = document.getElementById("location-status");
 let userLocation = null;
 let userMarker = null;
 let backendOnline = false;
-let passengerTrackingInterval = null;
-let locationPollInFlight = false;
+let passengerWatchId = null;
+let hasCenteredOnUser = false;
 
 function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -127,9 +127,11 @@ function renderArrivals(buses) {
   });
 }
 
-function setUserLocation(lat, lng) {
+function setUserLocation(lat, lng, accuracyMeters = null) {
   userLocation = { lat, lng };
-  locationStatusEl.textContent = `Tracking your location: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  const accuracySuffix = Number.isFinite(accuracyMeters) ? ` (+-${Math.round(accuracyMeters)} m)` : "";
+  const prefix = Number.isFinite(accuracyMeters) && accuracyMeters > 1000 ? "Approximate location" : "Tracking your location";
+  locationStatusEl.textContent = `${prefix}: ${lat.toFixed(5)}, ${lng.toFixed(5)}${accuracySuffix}`;
   if (!hasLeaflet) {
     return;
   }
@@ -145,48 +147,62 @@ function setUserLocation(lat, lng) {
   } else {
     userMarker.setLatLng([lat, lng]);
   }
-  map.setView([lat, lng], 14);
+  if (!hasCenteredOnUser) {
+    map.setView([lat, lng], 14);
+    hasCenteredOnUser = true;
+  }
 }
 
-function requestPassengerLocationUpdate() {
-  if (!navigator.geolocation || locationPollInFlight) {
-    return;
+function resolveGeolocationError(error) {
+  if (!error) {
+    return "Location permission denied or unavailable.";
   }
-
-  locationPollInFlight = true;
-  navigator.geolocation.getCurrentPosition(
-    (p) => {
-      locationPollInFlight = false;
-      setUserLocation(p.coords.latitude, p.coords.longitude);
-      if (backendOnline) fetchLiveBuses().catch(() => {});
-    },
-    () => {
-      locationPollInFlight = false;
-      locationStatusEl.textContent = "Location permission denied or unavailable.";
-      stopPassengerLocationTracking();
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
+  if (error.code === 1) {
+    return "Location permission denied. Enable location permission for this site.";
+  }
+  if (error.code === 2) {
+    return "Unable to detect GPS location. Turn on device location services.";
+  }
+  if (error.code === 3) {
+    return "GPS timed out. Move to open sky and keep internet/location on.";
+  }
+  return "Location permission denied or unavailable.";
 }
 
 function startPassengerLocationTracking() {
-  if (passengerTrackingInterval) {
+  if (passengerWatchId !== null || !navigator.geolocation) {
     return;
   }
-  locationStatusEl.textContent = "Starting live passenger tracking...";
-  requestPassengerLocationUpdate();
-  passengerTrackingInterval = setInterval(requestPassengerLocationUpdate, 1000);
+  locationStatusEl.textContent = "Waiting for accurate GPS fix...";
+  passengerWatchId = navigator.geolocation.watchPosition(
+    (p) => {
+      setUserLocation(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
+      if (backendOnline) fetchLiveBuses().catch(() => {});
+    },
+    (err) => {
+      locationStatusEl.textContent = resolveGeolocationError(err);
+      stopPassengerLocationTracking({ keepStatusText: true });
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
   locateBtn.textContent = "Stop tracking";
 }
 
-function stopPassengerLocationTracking() {
-  if (!passengerTrackingInterval) {
+function stopPassengerLocationTracking(options = {}) {
+  const keepStatusText = options.keepStatusText === true;
+  if (passengerWatchId !== null) {
+    navigator.geolocation.clearWatch(passengerWatchId);
+    passengerWatchId = null;
+  }
+  locateBtn.textContent = "Use my location";
+  if (keepStatusText) {
     return;
   }
-  clearInterval(passengerTrackingInterval);
-  passengerTrackingInterval = null;
-  locationPollInFlight = false;
-  locateBtn.textContent = "Use my location";
+  if (!userLocation) {
+    locationStatusEl.textContent = "Passenger location not set.";
+    return;
+  }
+  locationStatusEl.textContent = `Tracking paused at ${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}.`;
 }
 
 async function loadStops() {
@@ -276,7 +292,7 @@ locateBtn.addEventListener("click", () => {
     locationStatusEl.textContent = "Geolocation not supported in this browser.";
     return;
   }
-  if (passengerTrackingInterval) {
+  if (passengerWatchId !== null) {
     stopPassengerLocationTracking();
     return;
   }
