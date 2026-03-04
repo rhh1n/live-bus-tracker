@@ -50,6 +50,7 @@ const HIGH_ACCURACY_M = 120;
 const APPROXIMATE_ACCURACY_M = 1000;
 const COARSE_FIX_RETRY_LIMIT = 3;
 const PASSENGER_UPDATE_INTERVAL_MS = 2000;
+const MAX_NEAR_STOP_DISTANCE_KM = 5;
 
 function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -121,13 +122,12 @@ function getCurrentLocationLabel(bus) {
   const stop = bus?.nearestStop;
   if (stop && stop.stopName) {
     const stopDistance = Number(stop.distanceKm);
-    if (Number.isFinite(stopDistance)) {
+    if (Number.isFinite(stopDistance) && stopDistance <= MAX_NEAR_STOP_DISTANCE_KM) {
       if (stopDistance <= 0.2) {
         return `At ${stop.stopName}`;
       }
       return `Near ${stop.stopName} (${stopDistance.toFixed(1)} km)`;
     }
-    return `Near ${stop.stopName}`;
   }
 
   if (Number.isFinite(bus?.lat) && Number.isFinite(bus?.lng)) {
