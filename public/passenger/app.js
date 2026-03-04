@@ -113,24 +113,51 @@ function locationKey(lat, lng) {
   return `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
 }
 
+function normalizeEnglishText(value) {
+  return `${value ?? ""}`
+    .replace(/[^\u0000-\u024f0-9\s,./()\-']/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .trim();
+}
+
+function pickEnglishCandidate(candidates) {
+  for (const candidate of candidates) {
+    const normalized = normalizeEnglishText(candidate);
+    if (!normalized) {
+      continue;
+    }
+    if (!/[A-Za-z0-9]/.test(normalized)) {
+      continue;
+    }
+    return normalized;
+  }
+  return null;
+}
+
 function pickPlaceName(data) {
+  const namedetails = data?.namedetails || {};
   const addr = data?.address || {};
-  const primary =
-    data?.name ||
-    addr.road ||
-    addr.suburb ||
-    addr.neighbourhood ||
-    addr.village ||
-    addr.town ||
-    addr.city_district ||
-    addr.city ||
-    addr.county ||
-    null;
-  const secondary = addr.city || addr.town || addr.village || addr.state_district || addr.state || null;
+  const primary = pickEnglishCandidate([
+    namedetails["name:en"],
+    namedetails["official_name:en"],
+    namedetails["alt_name:en"],
+    data?.name,
+    addr.road,
+    addr.suburb,
+    addr.neighbourhood,
+    addr.hamlet,
+    addr.village,
+    addr.town,
+    addr.city_district,
+    addr.city,
+    addr.county
+  ]);
+  const secondary = pickEnglishCandidate([addr.city, addr.town, addr.village, addr.state_district, addr.state, addr.country]);
   if (primary && secondary && primary !== secondary) {
     return `${primary}, ${secondary}`;
   }
-  return primary || secondary || null;
+  return primary || secondary || "Nearby area";
 }
 
 function scheduleGeocodeRerender() {
@@ -164,6 +191,8 @@ async function reverseGeocodePlace(lat, lng) {
   url.searchParams.set("lon", String(lng));
   url.searchParams.set("zoom", "16");
   url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("namedetails", "1");
+  url.searchParams.set("accept-language", "en");
 
   const res = await fetch(url.toString(), {
     headers: {
