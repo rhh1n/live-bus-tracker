@@ -91,6 +91,25 @@ function focusMapOnServiceArea(busStops) {
   }
 }
 
+function getCurrentLocationLabel(bus) {
+  const stop = bus?.nearestStop;
+  if (stop && stop.stopName) {
+    const stopDistance = Number(stop.distanceKm);
+    if (Number.isFinite(stopDistance)) {
+      if (stopDistance <= 0.2) {
+        return `At ${stop.stopName}`;
+      }
+      return `Near ${stop.stopName} (${stopDistance.toFixed(1)} km)`;
+    }
+    return `Near ${stop.stopName}`;
+  }
+
+  if (Number.isFinite(bus?.lat) && Number.isFinite(bus?.lng)) {
+    return `${bus.lat.toFixed(5)}, ${bus.lng.toFixed(5)}`;
+  }
+  return "Unknown";
+}
+
 function upsertBus(bus) {
   if (!hasLeaflet) {
     return;
@@ -98,7 +117,13 @@ function upsertBus(bus) {
   const distToUser = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
   const source = bus.source || "Unknown";
   const destination = bus.destination || "Unknown";
-  const text = `<strong>Bus ${bus.id}</strong><br/>Trip: ${source} -> ${destination}<br/>From you: ${distToUser}<br/>GPS update: ${formatTime(bus.lastUpdated)}`;
+  const currentLocation = getCurrentLocationLabel(bus);
+  const text =
+    `<strong>Bus ${bus.id}</strong><br/>` +
+    `Trip: ${source} -> ${destination}<br/>` +
+    `Current location: ${currentLocation}<br/>` +
+    `From you: ${distToUser}<br/>` +
+    `GPS update: ${formatTime(bus.lastUpdated)}`;
 
   if (!busMarkers.has(bus.id)) {
     const marker = L.marker([bus.lat, bus.lng]).addTo(map);
@@ -139,9 +164,11 @@ function renderArrivals(buses) {
     const userDistance = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
     const source = bus.source || "Unknown";
     const destination = bus.destination || "Unknown";
+    const currentLocation = getCurrentLocationLabel(bus);
     card.innerHTML = `
       <div><strong>Bus ${bus.id}</strong><span class="badge bus">Live</span></div>
       <div class="meta">Trip: ${source} -> ${destination}</div>
+      <div class="meta">Current location: ${currentLocation}</div>
       <div class="meta">Distance from you: ${userDistance}</div>
       <div class="meta">GPS update: ${formatTime(bus.lastUpdated)}</div>
     `;
