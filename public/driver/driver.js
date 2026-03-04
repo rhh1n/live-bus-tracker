@@ -13,6 +13,11 @@ let watchId = null;
 let sendInFlight = false;
 let driverToken = null;
 
+function formatClock(dateLike = new Date()) {
+  const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 function addLog(msg) {
   if (!logEl) {
     return;
@@ -93,7 +98,7 @@ async function sendLocation(position) {
     const accuracyText = Number.isFinite(position.coords.accuracy)
       ? ` (+-${Math.round(position.coords.accuracy)} m)`
       : "";
-    lastEl.textContent = `Last GPS sent: ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}${accuracyText}`;
+    lastEl.textContent = `Last updated: ${formatClock()} | GPS: ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}${accuracyText}`;
     setStatus("Live tracking active.");
     addLog(
       `Uploaded ${payload.busId} (${payload.source || "Unknown"} -> ${payload.destination || "Unknown"}) @ ${payload.lat.toFixed(5)}, ${payload.lng.toFixed(5)}`
