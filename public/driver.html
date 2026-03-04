@@ -7,32 +7,69 @@
   <title>Driver GPS Uploader</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <header>
-    <h1>Driver GPS Uploader</h1>
-    <p>Use this page on driver phone to publish live bus location.</p>
+<body class="page page-driver">
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Driver Operations</p>
+      <h1>Driver GPS Uploader</h1>
+      <p class="subtitle">Use this page on driver phone to publish live bus location.</p>
+    </div>
+    <nav class="hero-nav" aria-label="App navigation">
+      <a href="/" class="nav-chip">Passenger</a>
+      <a href="/driver" class="nav-chip nav-chip-active">Driver</a>
+    </nav>
   </header>
 
-  <main class="driver-main">
-    <section class="list-panel driver-panel">
-      <h2>Bus Details</h2>
+  <main class="layout driver-layout">
+    <section class="list-panel driver-panel surface">
+      <div class="panel-title">
+        <h2>Live Driver Console</h2>
+        <p>Unlock with PIN and start tracking from this device</p>
+      </div>
       <div class="form-grid">
-        <label>Bus ID<input id="bus-id" type="text" value="bus-101" /></label>
-        <label>Route No<input id="route-no" type="text" value="101" /></label>
-        <label>Destination<input id="destination" type="text" value="Railway Junction" /></label>
-        <label>Driver PIN<input id="driver-pin" type="password" placeholder="Enter PIN" /></label>
+        <label>Bus ID
+          <input id="bus-id" type="text" value="bus-101" />
+        </label>
+        <label>Route No
+          <input id="route-no" type="text" value="101" />
+        </label>
+        <label>Destination
+          <input id="destination" type="text" value="Railway Junction" />
+        </label>
+        <label>Driver PIN
+          <input id="driver-pin" type="password" placeholder="Enter PIN" />
+        </label>
       </div>
 
-      <div class="controls">
+      <div class="controls driver-controls">
         <button id="unlock-btn" type="button">Unlock Driver</button>
         <button id="start-btn" type="button">Start Live Tracking</button>
-        <button id="stop-btn" type="button">Stop</button>
+        <button id="stop-btn" type="button">Stop Tracking</button>
       </div>
 
-      <p id="driver-status">Idle.</p>
-      <p id="driver-last">No GPS sent yet.</p>
+      <p id="driver-status" class="status-line" aria-live="polite">Idle.</p>
+      <p id="driver-last" class="status-line">No GPS sent yet.</p>
 
-      <div id="driver-log" class="driver-log"></div>
+      <section class="log-shell">
+        <h3>Upload Log</h3>
+        <div id="driver-log" class="driver-log"></div>
+      </section>
+    </section>
+
+    <section class="surface tips-panel">
+      <div class="panel-title">
+        <h2>Quick Checklist</h2>
+        <p>For best live accuracy while driving</p>
+      </div>
+      <ul class="tips-list">
+        <li>Keep phone location mode set to High Accuracy.</li>
+        <li>Place phone where GPS has open sky visibility.</li>
+        <li>Unlock once per session before starting tracking.</li>
+        <li>If status shows GPS errors, stop and start tracking again.</li>
+      </ul>
     </section>
   </main>
 

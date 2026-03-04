@@ -9,31 +9,52 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <header>
-    <h1>Live Bus Tracker</h1>
-    <p>See nearby buses and ETA at bus stands in real time.</p>
+<body class="page page-passenger">
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+
+  <header class="hero">
+    <div>
+      <p class="eyebrow">City Mobility</p>
+      <h1>Live Bus Tracker</h1>
+      <p class="subtitle">See nearby buses and ETA at bus stands in real time.</p>
+    </div>
+    <nav class="hero-nav" aria-label="App navigation">
+      <a href="/" class="nav-chip nav-chip-active">Passenger</a>
+      <a href="/driver" class="nav-chip">Driver</a>
+    </nav>
   </header>
 
-  <main>
-    <section class="map-panel">
+  <main class="layout passenger-layout">
+    <section class="map-panel surface">
+      <div class="panel-title">
+        <h2>Live Map</h2>
+        <p>Real-time buses and your current position</p>
+      </div>
       <div id="map"></div>
     </section>
-    <section class="list-panel">
-      <h2>Arrivals</h2>
+
+    <section class="list-panel surface">
+      <div class="panel-title">
+        <h2>Arrivals</h2>
+        <p>Closest buses sorted by distance</p>
+      </div>
       <div class="controls">
         <button id="locate-btn" type="button">Use my location</button>
-        <select id="radius-select" aria-label="Nearby radius">
-          <option value="2">2 km</option>
-          <option value="5">5 km</option>
-          <option value="10">10 km</option>
-          <option value="25">25 km</option>
-          <option value="50" selected>50 km</option>
-        </select>
+        <label class="select-shell">
+          <span>Radius</span>
+          <select id="radius-select" aria-label="Nearby radius">
+            <option value="2">2 km</option>
+            <option value="5">5 km</option>
+            <option value="10">10 km</option>
+            <option value="25">25 km</option>
+            <option value="50" selected>50 km</option>
+          </select>
+        </label>
       </div>
-      <p id="location-status">Passenger location not set.</p>
-      <p id="last-updated">Waiting for updates...</p>
-      <div id="arrivals"></div>
+      <p id="location-status" class="status-line" aria-live="polite">Passenger location not set.</p>
+      <p id="last-updated" class="status-line">Waiting for updates...</p>
+      <div id="arrivals" class="arrivals-list"></div>
     </section>
   </main>
 

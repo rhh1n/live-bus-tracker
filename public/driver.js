@@ -17,10 +17,37 @@ function addLog(msg) {
   const line = document.createElement("div");
   line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
   logEl.prepend(line);
+  while (logEl.childElementCount > 120) {
+    logEl.removeChild(logEl.lastChild);
+  }
 }
 
 function setStatus(msg) {
   statusEl.textContent = msg;
+}
+
+function setControlState() {
+  const tracking = watchId !== null;
+  const unlocked = !!driverToken;
+  startBtn.disabled = tracking || !unlocked;
+  stopBtn.disabled = !tracking;
+  unlockBtn.disabled = tracking;
+}
+
+function resolveGeolocationError(error) {
+  if (!error) {
+    return "GPS unavailable.";
+  }
+  if (error.code === 1) {
+    return "Location permission denied. Allow location access.";
+  }
+  if (error.code === 2) {
+    return "GPS signal unavailable. Move to open sky.";
+  }
+  if (error.code === 3) {
+    return "GPS request timed out. Try again.";
+  }
+  return "GPS error.";
 }
 
 async function sendLocation(position) {
@@ -60,7 +87,10 @@ async function sendLocation(position) {
       throw new Error(`Upload failed (${res.status}): ${text}`);
     }
 
-    lastEl.textContent = `Last GPS sent: ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}`;
+    const accuracyText = Number.isFinite(position.coords.accuracy)
+      ? ` (+-${Math.round(position.coords.accuracy)} m)`
+      : "";
+    lastEl.textContent = `Last GPS sent: ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}${accuracyText}`;
     setStatus("Live tracking active.");
     addLog(`Uploaded ${payload.busId} @ ${payload.lat.toFixed(5)}, ${payload.lng.toFixed(5)}`);
   } catch (err) {
@@ -78,6 +108,7 @@ async function unlockDriver() {
     return;
   }
 
+  setStatus("Verifying driver PIN...");
   try {
     const res = await fetch("/api/driver/login", {
       method: "POST",
@@ -94,10 +125,12 @@ async function unlockDriver() {
     driverToken = data.token;
     setStatus(`Driver unlocked. Session until ${new Date(data.expiresAt).toLocaleTimeString()}.`);
     addLog("Driver PIN verified.");
+    setControlState();
   } catch (err) {
     driverToken = null;
     setStatus("Invalid PIN.");
     addLog(err.message);
+    setControlState();
   }
 }
 
@@ -127,8 +160,10 @@ function startTracking() {
       sendLocation(position);
     },
     (error) => {
-      setStatus("GPS error. Check location permission.");
-      addLog(`GPS error: ${error.message}`);
+      const message = resolveGeolocationError(error);
+      setStatus(message);
+      addLog(`GPS error: ${error.message || message}`);
+      stopTracking({ keepStatusText: true });
     },
     {
       enableHighAccuracy: true,
@@ -136,16 +171,24 @@ function startTracking() {
       timeout: 15000
     }
   );
+  setControlState();
+  setStatus("Waiting for first GPS fix...");
 }
 
-function stopTracking() {
+function stopTracking(options = {}) {
+  const keepStatusText = options.keepStatusText === true;
   if (watchId !== null) {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
   }
-  setStatus("Tracking stopped.");
+  setControlState();
+  if (!keepStatusText) {
+    setStatus("Tracking stopped.");
+  }
 }
 
 startBtn.addEventListener("click", startTracking);
 stopBtn.addEventListener("click", stopTracking);
 unlockBtn.addEventListener("click", unlockDriver);
+
+setControlState();
