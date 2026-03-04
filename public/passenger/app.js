@@ -112,7 +112,9 @@ function upsertBus(bus) {
     return;
   }
   const distToUser = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
-  const text = `<strong>Bus ${bus.routeNo}</strong><br/>To: ${bus.destination}<br/>Near: ${bus.nearestStop.stopName}<br/>ETA: ${bus.nearestStop.etaMin} min<br/>From you: ${distToUser}`;
+  const source = bus.source || "Unknown";
+  const destination = bus.destination || "Unknown";
+  const text = `<strong>Bus ${bus.id}</strong><br/>Trip: ${source} -> ${destination}<br/>Near: ${bus.nearestStop.stopName}<br/>ETA: ${bus.nearestStop.etaMin} min<br/>From you: ${distToUser}`;
 
   if (!busMarkers.has(bus.id)) {
     const marker = L.marker([bus.lat, bus.lng]).addTo(map);
@@ -151,9 +153,11 @@ function renderArrivals(buses) {
     card.className = "arrival-card";
     card.style.setProperty("--stagger-index", String(index));
     const userDistance = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
+    const source = bus.source || "Unknown";
+    const destination = bus.destination || "Unknown";
     card.innerHTML = `
-      <div><strong>Route ${bus.routeNo}</strong><span class="badge bus">Live</span></div>
-      <div class="meta">Destination: ${bus.destination}</div>
+      <div><strong>Bus ${bus.id}</strong><span class="badge bus">Live</span></div>
+      <div class="meta">Trip: ${source} -> ${destination}</div>
       <div class="meta">Closest stop: ${bus.nearestStop.stopName} <span class="badge stop">Stop</span></div>
       <div class="meta">ETA to stop: ${bus.nearestStop.etaMin} min</div>
       <div class="meta">Distance from you: ${userDistance}</div>
@@ -341,9 +345,33 @@ function runOfflineDemo() {
     { id: "stop-4", name: "Railway Junction", lat: 12.9665, lng: 77.5881 }
   ];
   const buses = [
-    { id: "bus-101", routeNo: "101", destination: "Railway Junction", lat: 12.973, lng: 77.591, headingDeg: 65 },
-    { id: "bus-224", routeNo: "224", destination: "City Hospital", lat: 12.969, lng: 77.597, headingDeg: 130 },
-    { id: "bus-308", routeNo: "308", destination: "Market Circle", lat: 12.9675, lng: 77.5905, headingDeg: 25 }
+    {
+      id: "bus-101",
+      routeNo: "101",
+      source: "Central Bus Stand",
+      destination: "Railway Junction",
+      lat: 12.973,
+      lng: 77.591,
+      headingDeg: 65
+    },
+    {
+      id: "bus-224",
+      routeNo: "224",
+      source: "Market Circle",
+      destination: "City Hospital",
+      lat: 12.969,
+      lng: 77.597,
+      headingDeg: 130
+    },
+    {
+      id: "bus-308",
+      routeNo: "308",
+      source: "City Hospital Stop",
+      destination: "Market Circle",
+      lat: 12.9675,
+      lng: 77.5905,
+      headingDeg: 25
+    }
   ];
   busStops.forEach(upsertStop);
 

@@ -82,6 +82,7 @@ const seedBuses = [
   {
     id: "bus-101",
     routeNo: "101",
+    source: "Central Bus Stand",
     destination: "Railway Junction",
     lat: 12.973,
     lng: 77.591,
@@ -91,6 +92,7 @@ const seedBuses = [
   {
     id: "bus-224",
     routeNo: "224",
+    source: "Market Circle",
     destination: "City Hospital",
     lat: 12.969,
     lng: 77.597,
@@ -100,6 +102,7 @@ const seedBuses = [
   {
     id: "bus-308",
     routeNo: "308",
+    source: "City Hospital Stop",
     destination: "Market Circle",
     lat: 12.9675,
     lng: 77.5905,
@@ -303,7 +306,7 @@ app.get("/api/buses/live", (req, res) => {
 });
 
 app.post("/api/driver/location", requireDriverAuth, (req, res) => {
-  const { busId, routeNo, destination, lat, lng, speedKmph, headingDeg } = req.body || {};
+  const { busId, routeNo, source, destination, lat, lng, speedKmph, headingDeg } = req.body || {};
   const latN = toNumber(lat);
   const lngN = toNumber(lng);
 
@@ -314,7 +317,8 @@ app.post("/api/driver/location", requireDriverAuth, (req, res) => {
   const existing = busState.get(busId);
   const payload = {
     id: busId,
-    routeNo: routeNo || existing?.routeNo || "NA",
+    routeNo: routeNo || existing?.routeNo || busId,
+    source: source || existing?.source || "Unknown",
     destination: destination || existing?.destination || "Unknown",
     lat: latN,
     lng: lngN,

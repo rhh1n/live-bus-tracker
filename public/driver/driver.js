@@ -1,5 +1,5 @@
 const busIdEl = document.getElementById("bus-id");
-const routeNoEl = document.getElementById("route-no");
+const sourceEl = document.getElementById("source");
 const destinationEl = document.getElementById("destination");
 const pinEl = document.getElementById("driver-pin");
 const unlockBtn = document.getElementById("unlock-btn");
@@ -14,6 +14,9 @@ let sendInFlight = false;
 let driverToken = null;
 
 function addLog(msg) {
+  if (!logEl) {
+    return;
+  }
   const line = document.createElement("div");
   line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
   logEl.prepend(line);
@@ -64,7 +67,7 @@ async function sendLocation(position) {
 
   const payload = {
     busId: busIdEl.value.trim(),
-    routeNo: routeNoEl.value.trim(),
+    source: sourceEl.value.trim(),
     destination: destinationEl.value.trim(),
     lat: position.coords.latitude,
     lng: position.coords.longitude,
@@ -92,7 +95,9 @@ async function sendLocation(position) {
       : "";
     lastEl.textContent = `Last GPS sent: ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}${accuracyText}`;
     setStatus("Live tracking active.");
-    addLog(`Uploaded ${payload.busId} @ ${payload.lat.toFixed(5)}, ${payload.lng.toFixed(5)}`);
+    addLog(
+      `Uploaded ${payload.busId} (${payload.source || "Unknown"} -> ${payload.destination || "Unknown"}) @ ${payload.lat.toFixed(5)}, ${payload.lng.toFixed(5)}`
+    );
   } catch (err) {
     setStatus("Error while sending GPS. See log.");
     addLog(err.message);
@@ -150,7 +155,17 @@ function startTracking() {
 
   const busId = busIdEl.value.trim();
   if (!busId) {
-    setStatus("Bus ID is required.");
+    setStatus("Bus is required.");
+    return;
+  }
+
+  if (!sourceEl.value.trim()) {
+    setStatus("Source is required.");
+    return;
+  }
+
+  if (!destinationEl.value.trim()) {
+    setStatus("Destination is required.");
     return;
   }
 
