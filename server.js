@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 const DRIVER_API_KEY = process.env.DRIVER_API_KEY || "change-this-driver-key";
 const DRIVER_LOGIN_PIN = process.env.DRIVER_LOGIN_PIN || "1234";
 const ENABLE_SIMULATION = process.env.ENABLE_SIMULATION === "true";
-const STALE_AFTER_MS = 2 * 60 * 1000;
+const STALE_AFTER_MS = Math.max(5000, Number(process.env.BUS_STALE_AFTER_MS) || 15 * 1000);
 const DRIVER_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MIN_RADIUS_KM = 0.1;
 const DEFAULT_RADIUS_KM = 50;
@@ -441,6 +441,24 @@ app.post("/api/driver/location", locationRateLimiter, requireDriverAuth, (req, r
   });
 });
 
+app.post("/api/driver/stop", locationRateLimiter, requireDriverAuth, (req, res) => {
+  const busId = sanitizeText(req.body?.busId, MAX_BUS_ID_LEN);
+  if (!busId) {
+    return res.status(400).json({ error: "busId is required" });
+  }
+
+  const removed = busState.delete(busId);
+  if (removed) {
+    io.emit("bus:update", buildPayload());
+  }
+
+  return res.json({
+    ok: true,
+    busId,
+    removed
+  });
+});
+
 io.on("connection", (socket) => {
   socket.emit("bus:update", buildPayload());
 });
@@ -478,5 +496,6 @@ server.listen(PORT, () => {
   console.log(`Passenger web app: http://localhost:${PORT}/passenger`);
   console.log(`Driver web app: http://localhost:${PORT}/driver`);
   console.log(`Simulation mode: ${ENABLE_SIMULATION ? "ON" : "OFF"}`);
+  console.log(`Bus stale timeout: ${Math.round(STALE_AFTER_MS / 1000)}s`);
   console.log("Driver API endpoint: POST /api/driver/location");
 });

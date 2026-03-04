@@ -86,6 +86,7 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/driver/location" 
 - `GET /api/buses/history?busId=<id>&limit=<n>`
 - `POST /api/driver/login` (requires PIN)
 - `POST /api/driver/location` (requires `x-driver-token` or `x-api-key`)
+- `POST /api/driver/stop` (removes bus instantly from passenger view; requires `x-driver-token` or `x-api-key`)
 
 ## Production Next Steps
 - Replace in-memory state with Redis/PostgreSQL.
@@ -105,6 +106,7 @@ Use HTTPS hosting so mobile location permissions work.
 5. Set secret env var:
    - `DRIVER_API_KEY=your-strong-key`
    - `DRIVER_LOGIN_PIN=2468`
+   - `BUS_STALE_AFTER_MS=15000`
 6. Deploy and open the generated `https://...onrender.com` URL on mobile.
 
 ### Option B: Railway
@@ -114,6 +116,7 @@ Use HTTPS hosting so mobile location permissions work.
    - `DRIVER_API_KEY=your-strong-key`
    - `DRIVER_LOGIN_PIN=2468`
    - `ENABLE_SIMULATION=false`
+   - `BUS_STALE_AFTER_MS=15000`
 4. Deploy and open the public HTTPS URL on mobile.
 
 ## Install As Mobile App (PWA)

@@ -178,6 +178,30 @@ function resolveGeolocationError(error) {
   return "GPS error.";
 }
 
+async function notifyDriverStop(busId) {
+  if (!busId || !driverToken || !tokenIsValid(tokenExpiryIso)) {
+    return false;
+  }
+  try {
+    const res = await fetch("/api/driver/stop", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-driver-token": driverToken
+      },
+      body: JSON.stringify({ busId })
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Stop notify failed (${res.status}): ${text}`);
+    }
+    return true;
+  } catch (err) {
+    addLog(err.message);
+    return false;
+  }
+}
+
 async function sendLocation(position) {
   if (sendInFlight) {
     return;
@@ -346,6 +370,9 @@ function startTracking() {
 
 function stopTracking(options = {}) {
   const keepStatusText = options.keepStatusText === true;
+  const notifyServer = options.notifyServer !== false;
+  const busId = getFormValues().busId;
+
   if (watchId !== null) {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
@@ -357,6 +384,19 @@ function stopTracking(options = {}) {
   latestPosition = null;
   firstFixSent = false;
   setControlState();
+
+  if (notifyServer) {
+    notifyDriverStop(busId).then((removed) => {
+      if (!keepStatusText) {
+        setStatus(removed ? "Tracking stopped. Removed from passenger live map." : "Tracking stopped.");
+      }
+      if (removed) {
+        addLog(`Stopped ${busId}. Removed bus from passenger view.`);
+      }
+    });
+    return;
+  }
+
   if (!keepStatusText) {
     setStatus("Tracking stopped.");
   }
