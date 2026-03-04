@@ -27,6 +27,7 @@ This project is now structured for real deployments:
 ## Passenger Flow
 - Click `Use my location`
 - App queries `/api/buses/live?lat=...&lng=...&radiusKm=...`
+- Passenger radius is selectable up to `50 km` (default `50 km`)
 - Arrivals panel shows nearest live buses and ETA
 
 ## Driver Mobile Page (Real GPS)

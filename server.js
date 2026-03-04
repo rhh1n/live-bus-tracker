@@ -13,6 +13,9 @@ const DRIVER_LOGIN_PIN = process.env.DRIVER_LOGIN_PIN || "1234";
 const ENABLE_SIMULATION = process.env.ENABLE_SIMULATION === "true";
 const STALE_AFTER_MS = 2 * 60 * 1000;
 const DRIVER_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const MIN_RADIUS_KM = 0.1;
+const DEFAULT_RADIUS_KM = 50;
+const MAX_RADIUS_KM = 50;
 
 app.use(express.json());
 
@@ -225,7 +228,11 @@ app.post("/api/driver/login", (req, res) => {
 app.get("/api/buses/live", (req, res) => {
   const lat = toNumber(req.query.lat);
   const lng = toNumber(req.query.lng);
-  const radiusKm = Math.max(0.1, toNumber(req.query.radiusKm) || 5);
+  const requestedRadiusKm = toNumber(req.query.radiusKm);
+  const radiusKm = Math.min(
+    MAX_RADIUS_KM,
+    Math.max(MIN_RADIUS_KM, requestedRadiusKm ?? DEFAULT_RADIUS_KM)
+  );
   const buses = listLiveBuses().map((bus) => {
     const distanceToUserKm =
       lat !== null && lng !== null ? Number(distanceKm(lat, lng, bus.lat, bus.lng).toFixed(2)) : null;
