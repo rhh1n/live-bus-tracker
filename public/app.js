@@ -14,15 +14,22 @@ if (hasLeaflet) {
 const busMarkers = new Map();
 const stopMarkers = new Map();
 const locateBtn = document.getElementById("locate-btn");
+const manualLocateBtn = document.getElementById("manual-locate-btn");
 const radiusSelect = document.getElementById("radius-select");
 const lastUpdatedEl = document.getElementById("last-updated");
 const locationStatusEl = document.getElementById("location-status");
 
 let userLocation = null;
 let userMarker = null;
+let userAccuracyCircle = null;
 let backendOnline = false;
 let passengerWatchId = null;
 let hasCenteredOnUser = false;
+let manualPickMode = false;
+
+const COARSE_LOCATION_LIMIT_M = 3000;
+const HIGH_ACCURACY_M = 120;
+const APPROXIMATE_ACCURACY_M = 1000;
 
 function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -127,11 +134,23 @@ function renderArrivals(buses) {
   });
 }
 
-function setUserLocation(lat, lng, accuracyMeters = null) {
+function setUserLocation(lat, lng, accuracyMeters = null, source = "gps") {
   userLocation = { lat, lng };
-  const accuracySuffix = Number.isFinite(accuracyMeters) ? ` (+-${Math.round(accuracyMeters)} m)` : "";
-  const prefix = Number.isFinite(accuracyMeters) && accuracyMeters > 1000 ? "Approximate location" : "Tracking your location";
-  locationStatusEl.textContent = `${prefix}: ${lat.toFixed(5)}, ${lng.toFixed(5)}${accuracySuffix}`;
+  const accuracyKnown = Number.isFinite(accuracyMeters);
+  const accuracySuffix = accuracyKnown ? ` (+-${Math.round(accuracyMeters)} m)` : "";
+
+  if (source === "manual") {
+    locationStatusEl.textContent = `Manual location set: ${lat.toFixed(5)}, ${lng.toFixed(5)}.`;
+  } else if (accuracyKnown && accuracyMeters <= HIGH_ACCURACY_M) {
+    locationStatusEl.textContent = `High-accuracy GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}${accuracySuffix}`;
+  } else if (accuracyKnown && accuracyMeters <= APPROXIMATE_ACCURACY_M) {
+    locationStatusEl.textContent = `Tracking your location: ${lat.toFixed(5)}, ${lng.toFixed(5)}${accuracySuffix}`;
+  } else if (accuracyKnown) {
+    locationStatusEl.textContent = `Approximate location: ${lat.toFixed(5)}, ${lng.toFixed(5)}${accuracySuffix}. Use "Set on map" if this is wrong.`;
+  } else {
+    locationStatusEl.textContent = `Tracking your location: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+
   if (!hasLeaflet) {
     return;
   }
@@ -147,7 +166,21 @@ function setUserLocation(lat, lng, accuracyMeters = null) {
   } else {
     userMarker.setLatLng([lat, lng]);
   }
-  if (!hasCenteredOnUser) {
+
+  if (!userAccuracyCircle) {
+    userAccuracyCircle = L.circle([lat, lng], {
+      radius: Math.max(20, Number.isFinite(accuracyMeters) ? accuracyMeters : 35),
+      color: "#0057d9",
+      fillColor: "#0057d9",
+      fillOpacity: 0.08,
+      weight: 1
+    }).addTo(map);
+  } else {
+    userAccuracyCircle.setLatLng([lat, lng]);
+    userAccuracyCircle.setRadius(Math.max(20, Number.isFinite(accuracyMeters) ? accuracyMeters : 35));
+  }
+
+  if (!hasCenteredOnUser || source === "manual") {
     map.setView([lat, lng], 14);
     hasCenteredOnUser = true;
   }
@@ -173,10 +206,17 @@ function startPassengerLocationTracking() {
   if (passengerWatchId !== null || !navigator.geolocation) {
     return;
   }
+  manualPickMode = false;
+  manualLocateBtn.textContent = "Set on map";
   locationStatusEl.textContent = "Waiting for accurate GPS fix...";
   passengerWatchId = navigator.geolocation.watchPosition(
     (p) => {
-      setUserLocation(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
+      const accuracy = p.coords.accuracy;
+      if (Number.isFinite(accuracy) && accuracy > COARSE_LOCATION_LIMIT_M) {
+        locationStatusEl.textContent = `Location is too coarse (+-${Math.round(accuracy)} m). Move outdoors or use "Set on map".`;
+        return;
+      }
+      setUserLocation(p.coords.latitude, p.coords.longitude, accuracy, "gps");
       if (backendOnline) fetchLiveBuses().catch(() => {});
     },
     (err) => {
@@ -203,6 +243,29 @@ function stopPassengerLocationTracking(options = {}) {
     return;
   }
   locationStatusEl.textContent = `Tracking paused at ${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}.`;
+}
+
+function toggleManualPickMode() {
+  if (!hasLeaflet) {
+    locationStatusEl.textContent = "Map is not available. Cannot set location manually.";
+    return;
+  }
+
+  if (manualPickMode) {
+    manualPickMode = false;
+    manualLocateBtn.textContent = "Set on map";
+    if (userLocation) {
+      locationStatusEl.textContent = `Manual selection cancelled. Current location: ${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}.`;
+    } else {
+      locationStatusEl.textContent = "Manual selection cancelled.";
+    }
+    return;
+  }
+
+  stopPassengerLocationTracking({ keepStatusText: true });
+  manualPickMode = true;
+  manualLocateBtn.textContent = "Cancel map pick";
+  locationStatusEl.textContent = "Tap on the map to set your exact location.";
 }
 
 async function loadStops() {
@@ -298,6 +361,22 @@ locateBtn.addEventListener("click", () => {
   }
   startPassengerLocationTracking();
 });
+
+if (manualLocateBtn) {
+  manualLocateBtn.addEventListener("click", toggleManualPickMode);
+}
+
+if (hasLeaflet) {
+  map.on("click", (event) => {
+    if (!manualPickMode) {
+      return;
+    }
+    manualPickMode = false;
+    manualLocateBtn.textContent = "Set on map";
+    setUserLocation(event.latlng.lat, event.latlng.lng, 25, "manual");
+    if (backendOnline) fetchLiveBuses().catch(() => {});
+  });
+}
 
 radiusSelect.addEventListener("change", () => {
   if (backendOnline) fetchLiveBuses().catch(() => {});

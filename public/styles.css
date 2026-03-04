@@ -228,6 +228,7 @@ input {
 }
 
 #locate-btn,
+#manual-locate-btn,
 #unlock-btn,
 #start-btn,
 #stop-btn {
@@ -243,6 +244,7 @@ input {
 }
 
 #locate-btn:hover,
+#manual-locate-btn:hover,
 #unlock-btn:hover,
 #start-btn:hover,
 #stop-btn:hover {
@@ -255,6 +257,7 @@ input {
 }
 
 #locate-btn:disabled,
+#manual-locate-btn:disabled,
 #unlock-btn:disabled,
 #start-btn:disabled,
 #stop-btn:disabled {
@@ -437,6 +440,12 @@ input {
   }
 }
 
+#manual-locate-btn {
+  color: var(--accent-strong);
+  background: #ffffff;
+  border: 1px solid rgba(10, 94, 215, 0.3);
+}
+
 @media (max-width: 760px) {
   .hero,
   .layout {
@@ -475,6 +484,7 @@ input {
   }
 
   #locate-btn,
+  #manual-locate-btn,
   #unlock-btn,
   #start-btn,
   #stop-btn {
