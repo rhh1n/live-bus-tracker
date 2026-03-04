@@ -114,7 +114,7 @@ function upsertBus(bus) {
   const distToUser = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
   const source = bus.source || "Unknown";
   const destination = bus.destination || "Unknown";
-  const text = `<strong>Bus ${bus.id}</strong><br/>Trip: ${source} -> ${destination}<br/>Near: ${bus.nearestStop.stopName}<br/>ETA: ${bus.nearestStop.etaMin} min<br/>From you: ${distToUser}`;
+  const text = `<strong>Bus ${bus.id}</strong><br/>Trip: ${source} -> ${destination}<br/>ETA: ${bus.nearestStop.etaMin} min<br/>From you: ${distToUser}`;
 
   if (!busMarkers.has(bus.id)) {
     const marker = L.marker([bus.lat, bus.lng]).addTo(map);
@@ -158,8 +158,7 @@ function renderArrivals(buses) {
     card.innerHTML = `
       <div><strong>Bus ${bus.id}</strong><span class="badge bus">Live</span></div>
       <div class="meta">Trip: ${source} -> ${destination}</div>
-      <div class="meta">Closest stop: ${bus.nearestStop.stopName} <span class="badge stop">Stop</span></div>
-      <div class="meta">ETA to stop: ${bus.nearestStop.etaMin} min</div>
+      <div class="meta">ETA: ${bus.nearestStop.etaMin} min</div>
       <div class="meta">Distance from you: ${userDistance}</div>
       <div class="meta">GPS update: ${formatTime(bus.lastUpdated)}</div>
     `;
