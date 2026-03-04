@@ -729,6 +729,33 @@ input {
   }
 }
 
+/* Motion disabled temporarily */
+*,
+*::before,
+*::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+#locate-btn::after,
+#manual-locate-btn::after,
+#unlock-btn::after,
+#start-btn::after,
+#stop-btn::after {
+  content: none !important;
+}
+
+.nav-chip:hover,
+#locate-btn:hover,
+#manual-locate-btn:hover,
+#unlock-btn:hover,
+#start-btn:hover,
+#stop-btn:hover,
+.arrival-card:hover {
+  transform: none !important;
+  filter: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;

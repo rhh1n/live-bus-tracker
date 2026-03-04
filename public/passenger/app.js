@@ -66,25 +66,6 @@ function distanceKm(aLat, aLng, bLat, bLng) {
   return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
 }
 
-function nearestStop(bus, busStops) {
-  let best = busStops[0];
-  let bestD = distanceKm(bus.lat, bus.lng, best.lat, best.lng);
-  for (let i = 1; i < busStops.length; i += 1) {
-    const stop = busStops[i];
-    const d = distanceKm(bus.lat, bus.lng, stop.lat, stop.lng);
-    if (d < bestD) {
-      best = stop;
-      bestD = d;
-    }
-  }
-  return {
-    stopId: best.id,
-    stopName: best.name,
-    distanceKm: Number(bestD.toFixed(2)),
-    etaMin: Math.max(1, Math.round((bestD / 24) * 60))
-  };
-}
-
 function upsertStop(stop) {
   if (!hasLeaflet || stopMarkers.has(stop.id)) {
     return;
@@ -117,7 +98,7 @@ function upsertBus(bus) {
   const distToUser = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
   const source = bus.source || "Unknown";
   const destination = bus.destination || "Unknown";
-  const text = `<strong>Bus ${bus.id}</strong><br/>Trip: ${source} -> ${destination}<br/>ETA: ${bus.nearestStop.etaMin} min<br/>From you: ${distToUser}`;
+  const text = `<strong>Bus ${bus.id}</strong><br/>Trip: ${source} -> ${destination}<br/>From you: ${distToUser}<br/>GPS update: ${formatTime(bus.lastUpdated)}`;
 
   if (!busMarkers.has(bus.id)) {
     const marker = L.marker([bus.lat, bus.lng]).addTo(map);
@@ -161,7 +142,6 @@ function renderArrivals(buses) {
     card.innerHTML = `
       <div><strong>Bus ${bus.id}</strong><span class="badge bus">Live</span></div>
       <div class="meta">Trip: ${source} -> ${destination}</div>
-      <div class="meta">ETA: ${bus.nearestStop.etaMin} min</div>
       <div class="meta">Distance from you: ${userDistance}</div>
       <div class="meta">GPS update: ${formatTime(bus.lastUpdated)}</div>
     `;
