@@ -21,7 +21,6 @@ const locationStatusEl = document.getElementById("location-status");
 
 let userLocation = null;
 let userMarker = null;
-let userAccuracyCircle = null;
 let backendOnline = false;
 let passengerWatchId = null;
 let hasCenteredOnUser = false;
@@ -165,19 +164,6 @@ function setUserLocation(lat, lng, accuracyMeters = null, source = "gps") {
     userMarker.bindPopup("You are here");
   } else {
     userMarker.setLatLng([lat, lng]);
-  }
-
-  if (!userAccuracyCircle) {
-    userAccuracyCircle = L.circle([lat, lng], {
-      radius: Math.max(20, Number.isFinite(accuracyMeters) ? accuracyMeters : 35),
-      color: "#0057d9",
-      fillColor: "#0057d9",
-      fillOpacity: 0.08,
-      weight: 1
-    }).addTo(map);
-  } else {
-    userAccuracyCircle.setLatLng([lat, lng]);
-    userAccuracyCircle.setRadius(Math.max(20, Number.isFinite(accuracyMeters) ? accuracyMeters : 35));
   }
 
   if (!hasCenteredOnUser || source === "manual") {
