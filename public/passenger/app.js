@@ -52,16 +52,6 @@ function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function formatUpdateHistory(updateHistory, fallbackIso) {
-  if (Array.isArray(updateHistory) && updateHistory.length) {
-    return updateHistory.slice(0, 5).map((iso) => formatTime(iso)).join(" -> ");
-  }
-  if (fallbackIso) {
-    return formatTime(fallbackIso);
-  }
-  return "N/A";
-}
-
 function distanceKm(aLat, aLng, bLat, bLng) {
   const R = 6371;
   const toRad = (v) => (v * Math.PI) / 180;
@@ -124,8 +114,7 @@ function upsertBus(bus) {
   const distToUser = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
   const source = bus.source || "Unknown";
   const destination = bus.destination || "Unknown";
-  const historyText = formatUpdateHistory(bus.updateHistory, bus.lastUpdated);
-  const text = `<strong>Bus ${bus.id}</strong><br/>Trip: ${source} -> ${destination}<br/>ETA: ${bus.nearestStop.etaMin} min<br/>From you: ${distToUser}<br/>Update history: ${historyText}`;
+  const text = `<strong>Bus ${bus.id}</strong><br/>Trip: ${source} -> ${destination}<br/>ETA: ${bus.nearestStop.etaMin} min<br/>From you: ${distToUser}`;
 
   if (!busMarkers.has(bus.id)) {
     const marker = L.marker([bus.lat, bus.lng]).addTo(map);
@@ -166,14 +155,12 @@ function renderArrivals(buses) {
     const userDistance = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
     const source = bus.source || "Unknown";
     const destination = bus.destination || "Unknown";
-    const historyText = formatUpdateHistory(bus.updateHistory, bus.lastUpdated);
     card.innerHTML = `
       <div><strong>Bus ${bus.id}</strong><span class="badge bus">Live</span></div>
       <div class="meta">Trip: ${source} -> ${destination}</div>
       <div class="meta">ETA: ${bus.nearestStop.etaMin} min</div>
       <div class="meta">Distance from you: ${userDistance}</div>
       <div class="meta">GPS update: ${formatTime(bus.lastUpdated)}</div>
-      <div class="meta">Update history: ${historyText}</div>
     `;
     host.appendChild(card);
   });
