@@ -176,6 +176,10 @@ h1 {
   gap: 0.5rem;
 }
 
+.page-passenger .hero-nav {
+  display: none;
+}
+
 .nav-chip {
   text-decoration: none;
   border-radius: 999px;
@@ -636,57 +640,102 @@ input {
 }
 
 @media (max-width: 760px) {
+  body.page::before {
+    opacity: 0.1;
+  }
+
+  .bg-glow-a,
+  .bg-glow-b {
+    opacity: 0.24;
+    filter: blur(18px);
+  }
+
   .hero,
   .layout {
-    width: min(1240px, calc(100% - 1.12rem));
+    width: min(1240px, calc(100% - 0.92rem));
   }
 
   .hero {
-    padding-top: 1rem;
+    padding: 0.82rem 0 0.62rem;
     flex-direction: column;
     align-items: flex-start;
+    gap: 0.58rem;
+  }
+
+  h1 {
+    font-size: 1.94rem;
+    margin-top: 0.48rem;
+  }
+
+  .subtitle {
+    margin-top: 0.44rem;
+    font-size: 0.94rem;
+    line-height: 1.35;
   }
 
   .hero-nav {
-    margin-top: 0.2rem;
-    width: 100%;
+    margin-top: 0;
+    width: auto;
   }
 
   .nav-chip {
-    flex: 1 1 0;
-    min-height: 44px;
+    min-height: 40px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding-inline: 0.84rem;
+    font-size: 0.84rem;
   }
 
   .panel-title,
   .list-panel,
   .driver-panel,
   .tips-panel {
-    padding-left: 0.85rem;
-    padding-right: 0.85rem;
+    padding-left: 0.74rem;
+    padding-right: 0.74rem;
+  }
+
+  .panel-title {
+    padding-top: 0.72rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .panel-title h2 {
+    font-size: 1.22rem;
+  }
+
+  .panel-title p {
+    margin-top: 0.24rem;
+    font-size: 0.88rem;
   }
 
   .controls {
-    gap: 0.5rem;
+    margin-top: 0.36rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.52rem;
+  }
+
+  .controls > * {
+    min-width: 0;
   }
 
   #map {
-    min-height: 280px;
-    height: 46svh;
-  }
-
-  .passenger-layout .list-panel {
-    order: 1;
+    min-height: 250px;
+    height: 42svh;
   }
 
   .passenger-layout .map-panel {
+    order: 1;
+  }
+
+  .passenger-layout .list-panel {
     order: 2;
   }
 
   .form-grid {
     grid-template-columns: 1fr;
+    gap: 0.56rem;
   }
 
   #locate-btn,
@@ -695,37 +744,95 @@ input {
   #start-btn,
   #stop-btn {
     width: 100%;
-    min-height: 46px;
-    font-size: 0.98rem;
+    min-height: 47px;
+    font-size: 0.95rem;
+    padding: 0.6rem 0.72rem;
   }
 
   .form-grid input {
     font-size: 16px;
-    min-height: 46px;
+    min-height: 44px;
+    padding: 0.56rem 0.62rem;
+  }
+
+  .driver-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.52rem;
+  }
+
+  .driver-controls #stop-btn {
+    grid-column: 1 / -1;
   }
 
   .select-shell {
+    grid-column: 1 / -1;
     width: 100%;
     justify-content: space-between;
-    min-height: 46px;
+    min-height: 47px;
+    padding: 0.42rem 0.52rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
   }
 
   #radius-select {
     font-size: 16px;
-    min-height: 40px;
+    min-height: 42px;
+    min-width: 104px;
+    padding: 0.32rem 0.48rem;
   }
 
   .status-line {
-    font-size: 0.95rem;
-    line-height: 1.45;
+    margin-top: 0.46rem;
+    font-size: 0.9rem;
+    line-height: 1.36;
+    padding: 0.5rem 0.58rem;
+    border-radius: 10px;
+  }
+
+  .arrivals-list {
+    margin-top: 0.06rem;
   }
 
   .arrival-card {
-    padding: 0.84rem;
+    margin-top: 0.58rem;
+    padding: 0.74rem;
+    border-radius: 14px;
+  }
+
+  .arrival-card strong {
+    font-size: 1rem;
   }
 
   .meta {
+    margin-top: 0.24rem;
+    font-size: 0.9rem;
     line-height: 1.4;
+  }
+}
+
+@media (max-width: 390px) {
+  .hero,
+  .layout {
+    width: calc(100% - 0.7rem);
+  }
+
+  h1 {
+    font-size: 1.78rem;
+  }
+
+  .controls,
+  .driver-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .driver-controls #stop-btn {
+    grid-column: auto;
+  }
+
+  #map {
+    min-height: 230px;
+    height: 38svh;
   }
 }
 
