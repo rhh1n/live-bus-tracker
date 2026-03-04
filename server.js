@@ -27,14 +27,14 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use("/passenger", express.static(PASSENGER_WEB_ROOT));
+app.use("/passenger", express.static(PASSENGER_WEB_ROOT, { redirect: false }));
 app.use(
   "/driver",
   (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     next();
   },
-  express.static(DRIVER_WEB_ROOT)
+  express.static(DRIVER_WEB_ROOT, { redirect: false })
 );
 
 app.get("/", (_req, res) => {
