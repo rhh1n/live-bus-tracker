@@ -27,12 +27,14 @@ if (hasLeaflet) {
 }
 
 const busMarkers = new Map();
-const stopMarkers = new Map();
 const locateBtn = document.getElementById("locate-btn");
 const manualLocateBtn = document.getElementById("manual-locate-btn");
 const radiusSelect = document.getElementById("radius-select");
 const lastUpdatedEl = document.getElementById("last-updated");
 const locationStatusEl = document.getElementById("location-status");
+const busLocationNameCache = new Map();
+const busLocationNameInFlight = new Set();
+const geocodeQueue = [];
 
 let userLocation = null;
 let userMarker = null;
@@ -44,6 +46,9 @@ let hasCenteredOnUser = false;
 let manualPickMode = false;
 let coarseFixCount = 0;
 let hasReliableFix = false;
+let geocodeWorkerRunning = false;
+let latestLiveBuses = [];
+let geocodeRenderScheduled = false;
 
 const COARSE_LOCATION_LIMIT_M = 3000;
 const HIGH_ACCURACY_M = 120;
@@ -51,6 +56,7 @@ const APPROXIMATE_ACCURACY_M = 1000;
 const COARSE_FIX_RETRY_LIMIT = 3;
 const PASSENGER_UPDATE_INTERVAL_MS = 2000;
 const MAX_NEAR_STOP_DISTANCE_KM = 5;
+const GEOCODE_REQUEST_GAP_MS = 1200;
 
 function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -93,21 +99,6 @@ function distanceKm(aLat, aLng, bLat, bLng) {
   return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
 }
 
-function upsertStop(stop) {
-  if (!hasLeaflet || stopMarkers.has(stop.id)) {
-    return;
-  }
-  const marker = L.circleMarker([stop.lat, stop.lng], {
-    radius: 8,
-    color: "#ff7a18",
-    fillColor: "#ff7a18",
-    fillOpacity: 0.7,
-    weight: 2
-  }).addTo(map);
-  marker.bindPopup(`<strong>${stop.name}</strong><br/><span>Bus Stand</span>`);
-  stopMarkers.set(stop.id, marker);
-}
-
 function focusMapOnServiceArea(busStops) {
   if (!hasLeaflet || !Array.isArray(busStops) || !busStops.length || userLocation) {
     return;
@@ -118,6 +109,107 @@ function focusMapOnServiceArea(busStops) {
   }
 }
 
+function locationKey(lat, lng) {
+  return `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
+}
+
+function pickPlaceName(data) {
+  const addr = data?.address || {};
+  const primary =
+    data?.name ||
+    addr.road ||
+    addr.suburb ||
+    addr.neighbourhood ||
+    addr.village ||
+    addr.town ||
+    addr.city_district ||
+    addr.city ||
+    addr.county ||
+    null;
+  const secondary = addr.city || addr.town || addr.village || addr.state_district || addr.state || null;
+  if (primary && secondary && primary !== secondary) {
+    return `${primary}, ${secondary}`;
+  }
+  return primary || secondary || null;
+}
+
+function scheduleGeocodeRerender() {
+  if (geocodeRenderScheduled) {
+    return;
+  }
+  geocodeRenderScheduled = true;
+  setTimeout(() => {
+    geocodeRenderScheduled = false;
+    if (!latestLiveBuses.length) {
+      return;
+    }
+    const ids = new Set();
+    latestLiveBuses.forEach((bus) => {
+      ids.add(bus.id);
+      upsertBus(bus);
+    });
+    clearOldBusMarkers(ids);
+    renderArrivals(latestLiveBuses);
+  }, 0);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function reverseGeocodePlace(lat, lng) {
+  const url = new URL("https://nominatim.openstreetmap.org/reverse");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lng));
+  url.searchParams.set("zoom", "16");
+  url.searchParams.set("addressdetails", "1");
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      Accept: "application/json"
+    }
+  });
+  if (!res.ok) {
+    throw new Error(`reverse geocode failed (${res.status})`);
+  }
+  const data = await res.json();
+  return pickPlaceName(data);
+}
+
+async function processGeocodeQueue() {
+  if (geocodeWorkerRunning) {
+    return;
+  }
+  geocodeWorkerRunning = true;
+  while (geocodeQueue.length) {
+    const item = geocodeQueue.shift();
+    if (!item) {
+      continue;
+    }
+    try {
+      const place = await reverseGeocodePlace(item.lat, item.lng);
+      busLocationNameCache.set(item.key, place || "Area name unavailable");
+    } catch (_err) {
+      busLocationNameCache.set(item.key, "Area name unavailable");
+    } finally {
+      busLocationNameInFlight.delete(item.key);
+      scheduleGeocodeRerender();
+    }
+    await sleep(GEOCODE_REQUEST_GAP_MS);
+  }
+  geocodeWorkerRunning = false;
+}
+
+function queuePlaceLookup(lat, lng, key) {
+  if (busLocationNameCache.has(key) || busLocationNameInFlight.has(key)) {
+    return;
+  }
+  busLocationNameInFlight.add(key);
+  geocodeQueue.push({ lat, lng, key });
+  processGeocodeQueue().catch(() => {});
+}
+
 function getCurrentLocationLabel(bus) {
   const stop = bus?.nearestStop;
   if (stop && stop.stopName) {
@@ -126,14 +218,20 @@ function getCurrentLocationLabel(bus) {
       if (stopDistance <= 0.2) {
         return `At ${stop.stopName}`;
       }
-      return `Near ${stop.stopName} (${stopDistance.toFixed(1)} km)`;
+      return `Near ${stop.stopName}`;
     }
   }
 
   if (Number.isFinite(bus?.lat) && Number.isFinite(bus?.lng)) {
-    return `${bus.lat.toFixed(5)}, ${bus.lng.toFixed(5)}`;
+    const key = locationKey(bus.lat, bus.lng);
+    const cachedName = busLocationNameCache.get(key);
+    if (cachedName) {
+      return cachedName;
+    }
+    queuePlaceLookup(bus.lat, bus.lng, key);
+    return "Resolving place...";
   }
-  return "Unknown";
+  return "Unknown area";
 }
 
 function upsertBus(bus) {
@@ -385,7 +483,6 @@ async function loadStops() {
   const res = await fetch("/api/stops");
   if (!res.ok) throw new Error("stops failed");
   const data = await res.json();
-  data.busStops.forEach(upsertStop);
   focusMapOnServiceArea(data.busStops);
 }
 
@@ -399,6 +496,7 @@ async function fetchLiveBuses() {
   const res = await fetch(`/api/buses/live?${params.toString()}`);
   if (!res.ok) throw new Error("live failed");
   const payload = await res.json();
+  latestLiveBuses = payload.buses;
   const ids = new Set();
   payload.buses.forEach((bus) => {
     ids.add(bus.id);
