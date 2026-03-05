@@ -1,5 +1,14 @@
 const hasLeaflet = typeof L !== "undefined";
 const map = hasLeaflet ? L.map("map").setView([12.9716, 77.5946], 14) : null;
+const busEmojiIcon = hasLeaflet
+  ? L.divIcon({
+      className: "bus-emoji-marker",
+      html: '<span aria-hidden="true">🚌</span>',
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+      popupAnchor: [0, -6]
+    })
+  : null;
 
 if (hasLeaflet) {
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -286,7 +295,8 @@ function upsertBus(bus) {
     `GPS update: ${gpsUpdateSafe} (${updatedAgoSafe} ago)`;
 
   if (!busMarkers.has(bus.id)) {
-    const marker = L.marker([bus.lat, bus.lng]).addTo(map);
+    const markerOptions = busEmojiIcon ? { icon: busEmojiIcon } : {};
+    const marker = L.marker([bus.lat, bus.lng], markerOptions).addTo(map);
     marker.bindPopup(text);
     busMarkers.set(bus.id, marker);
     return;
