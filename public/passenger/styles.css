@@ -634,8 +634,8 @@ input {
 
 .bus-emoji-marker span {
   display: block;
-  font-size: 11px;
-  line-height: 11px;
+  font-size: 13px;
+  line-height: 13px;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
   transform: translate(-1px, -1px);
 }
@@ -956,8 +956,8 @@ input {
   }
 
   .bus-emoji-marker span {
-    font-size: 10px;
-    line-height: 10px;
+    font-size: 12px;
+    line-height: 12px;
   }
 
   .page-passenger .arrivals-list {
