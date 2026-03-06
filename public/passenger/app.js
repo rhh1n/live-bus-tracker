@@ -4,9 +4,9 @@ const busEmojiIcon = hasLeaflet
   ? L.divIcon({
       className: "bus-emoji-marker",
       html: '<span aria-hidden="true">🚌</span>',
-      iconSize: [12, 12],
-      iconAnchor: [6, 6],
-      popupAnchor: [0, -6]
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+      popupAnchor: [0, -12]
     })
   : null;
 
