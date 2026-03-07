@@ -3,7 +3,7 @@ const map = hasLeaflet ? L.map("map").setView([12.9716, 77.5946], 14) : null;
 const busEmojiIcon = hasLeaflet
   ? L.divIcon({
       className: "bus-emoji-marker",
-      html: '<span aria-hidden="true">🚌</span>',
+      html: '<span aria-hidden="true">&#x1F68C;</span>',
       iconSize: [24, 24],
       iconAnchor: [12, 12],
       popupAnchor: [0, -12]
@@ -64,7 +64,6 @@ const HIGH_ACCURACY_M = 120;
 const APPROXIMATE_ACCURACY_M = 1000;
 const COARSE_FIX_RETRY_LIMIT = 3;
 const PASSENGER_UPDATE_INTERVAL_MS = 2000;
-const MAX_NEAR_STOP_DISTANCE_KM = 5;
 const GEOCODE_REQUEST_GAP_MS = 1200;
 
 function formatTime(iso) {
@@ -147,6 +146,10 @@ function pickEnglishCandidate(candidates) {
 function pickPlaceName(data) {
   const namedetails = data?.namedetails || {};
   const addr = data?.address || {};
+  const fullAddress = pickEnglishCandidate([data?.display_name]);
+  if (fullAddress) {
+    return fullAddress;
+  }
   const primary = pickEnglishCandidate([
     namedetails["name:en"],
     namedetails["official_name:en"],
@@ -198,7 +201,7 @@ async function reverseGeocodePlace(lat, lng) {
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("lat", String(lat));
   url.searchParams.set("lon", String(lng));
-  url.searchParams.set("zoom", "16");
+  url.searchParams.set("zoom", "18");
   url.searchParams.set("addressdetails", "1");
   url.searchParams.set("namedetails", "1");
   url.searchParams.set("accept-language", "en");
@@ -249,17 +252,6 @@ function queuePlaceLookup(lat, lng, key) {
 }
 
 function getCurrentLocationLabel(bus) {
-  const stop = bus?.nearestStop;
-  if (stop && stop.stopName) {
-    const stopDistance = Number(stop.distanceKm);
-    if (Number.isFinite(stopDistance) && stopDistance <= MAX_NEAR_STOP_DISTANCE_KM) {
-      if (stopDistance <= 0.2) {
-        return `At ${stop.stopName}`;
-      }
-      return `Near ${stop.stopName}`;
-    }
-  }
-
   if (Number.isFinite(bus?.lat) && Number.isFinite(bus?.lng)) {
     const key = locationKey(bus.lat, bus.lng);
     const cachedName = busLocationNameCache.get(key);
@@ -626,3 +618,4 @@ if ("serviceWorker" in navigator) {
 window.addEventListener("beforeunload", () => {
   stopPassengerLocationTracking();
 });
+
