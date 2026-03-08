@@ -1,13 +1,12 @@
 <resources>
-    <color name="primaryBlue">#0F4F9A</color>
-    <color name="primaryBlueDark">#0A3E7B</color>
-    <color name="surfaceSoft">#EEF3FA</color>
-    <color name="surfaceCard">#FDFEFF</color>
-    <color name="cardStroke">#D7DFEA</color>
-    <color name="statusBg">#F2F7FF</color>
-    <color name="textStrong">#1A2F4D</color>
-    <color name="textSoft">#5A6D86</color>
-    <color name="goldInk">#8C6B36</color>
-    <color name="goldBg">#F5EDDD</color>
+    <color name="primaryBlue">#0C4D95</color>
+    <color name="primaryBlueDark">#083A74</color>
+    <color name="surfaceSoft">#EAF1FB</color>
+    <color name="surfaceCard">#FCFEFF</color>
+    <color name="cardStroke">#D5DEEC</color>
+    <color name="statusBg">#EEF5FF</color>
+    <color name="textStrong">#142D4E</color>
+    <color name="textSoft">#4F647F</color>
+    <color name="goldInk">#82612B</color>
+    <color name="goldBg">#F4EAD5</color>
 </resources>
-
