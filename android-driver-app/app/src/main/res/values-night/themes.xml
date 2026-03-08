@@ -1,0 +1,4 @@
+<resources>
+    <style name="Theme.DriverGpsUploader" parent="Theme.Material3.Dark.NoActionBar" />
+</resources>
+

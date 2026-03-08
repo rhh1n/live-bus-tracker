@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">Driver GPS Uploader</string>
+    <string name="subtitle">Screen-off live bus tracking app</string>
+    <string name="base_url">Backend Base URL</string>
+    <string name="bus_id">Bus ID</string>
+    <string name="source">Source</string>
+    <string name="destination">Destination</string>
+    <string name="driver_pin">Driver PIN</string>
+    <string name="grant_permissions">Grant Permissions</string>
+    <string name="unlock_driver">Unlock Driver</string>
+    <string name="start_live_tracking">Start Live Tracking</string>
+    <string name="stop_tracking">Stop Tracking</string>
+    <string name="status_idle">Idle</string>
+</resources>
+
