@@ -181,7 +181,10 @@ function findStopByName(name) {
   if (exact) {
     return exact;
   }
-  return busStops.find((stop) => target.includes(normalizeStopName(stop.name)));
+  return busStops.find((stop) => {
+    const stopName = normalizeStopName(stop.name);
+    return target.includes(stopName) || stopName.includes(target);
+  });
 }
 
 function resolveDestinationCoords(bus) {
@@ -498,11 +501,19 @@ app.post("/api/eta", etaRateLimiter, async (req, res) => {
   const busId = sanitizeText(req.body?.busId, MAX_BUS_ID_LEN);
   const passengerLat = toNumber(req.body?.passengerLat);
   const passengerLng = toNumber(req.body?.passengerLng);
+  const destinationLat = toNumber(req.body?.destinationLat);
+  const destinationLng = toNumber(req.body?.destinationLng);
   if (!busId || passengerLat === null || passengerLng === null) {
     return res.status(400).json({ error: "busId, passengerLat, passengerLng are required." });
   }
   if (!isValidCoordinate(passengerLat, passengerLng)) {
     return res.status(400).json({ error: "passengerLat/passengerLng must be valid coordinates." });
+  }
+  if ((destinationLat !== null || destinationLng !== null) && (destinationLat === null || destinationLng === null)) {
+    return res.status(400).json({ error: "destinationLat/destinationLng must be valid coordinates." });
+  }
+  if (destinationLat !== null && destinationLng !== null && !isValidCoordinate(destinationLat, destinationLng)) {
+    return res.status(400).json({ error: "destinationLat/destinationLng must be valid coordinates." });
   }
 
   const bus = busState.get(busId);
@@ -513,7 +524,10 @@ app.post("/api/eta", etaRateLimiter, async (req, res) => {
     return res.status(404).json({ error: "Bus location is stale." });
   }
 
-  const destinationCoords = resolveDestinationCoords(bus);
+  const destinationCoords =
+    destinationLat !== null && destinationLng !== null
+      ? { lat: destinationLat, lng: destinationLng, source: "passenger" }
+      : resolveDestinationCoords(bus);
   const cacheKey = buildEtaCacheKey(busId, passengerLat, passengerLng, destinationCoords);
   const cached = etaCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {

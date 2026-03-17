@@ -379,7 +379,9 @@ async function fetchEtaForBus(bus) {
         body: JSON.stringify({
           busId: bus.id,
           passengerLat: userLocation.lat,
-          passengerLng: userLocation.lng
+          passengerLng: userLocation.lng,
+          destinationLat: bus?.destinationCoords?.lat ?? null,
+          destinationLng: bus?.destinationCoords?.lng ?? null
         })
       });
       if (!res.ok) {

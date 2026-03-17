@@ -59,7 +59,10 @@ function findStopByName(name) {
   if (exact) {
     return exact;
   }
-  return knownStops.find((stop) => target.includes(normalizeStopName(stop.name)));
+  return knownStops.find((stop) => {
+    const stopName = normalizeStopName(stop.name);
+    return target.includes(stopName) || stopName.includes(target);
+  });
 }
 
 function maybeAutofillDestinationCoords() {
