@@ -1,6 +1,8 @@
 const busIdEl = document.getElementById("bus-id");
 const sourceEl = document.getElementById("source");
 const destinationEl = document.getElementById("destination");
+const destinationLatEl = document.getElementById("destination-lat");
+const destinationLngEl = document.getElementById("destination-lng");
 const pinEl = document.getElementById("driver-pin");
 const unlockBtn = document.getElementById("unlock-btn");
 const startBtn = document.getElementById("start-btn");
@@ -16,6 +18,7 @@ let tokenExpiryIso = null;
 let latestPosition = null;
 let uploadIntervalId = null;
 let firstFixSent = false;
+let knownStops = [];
 
 const DRIVER_UPLOAD_INTERVAL_MS = 2000;
 const FORM_STORAGE_KEY = "bus-tracker-driver-form-v1";
@@ -35,11 +38,52 @@ function normalizeText(value, maxLen = MAX_TEXT_LEN) {
   return cleaned.slice(0, maxLen);
 }
 
+function toNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeStopName(value) {
+  return normalizeText(value, MAX_TEXT_LEN).toLowerCase();
+}
+
+function findStopByName(name) {
+  if (!name) {
+    return null;
+  }
+  const target = normalizeStopName(name);
+  if (!target) {
+    return null;
+  }
+  const exact = knownStops.find((stop) => normalizeStopName(stop.name) === target);
+  if (exact) {
+    return exact;
+  }
+  return knownStops.find((stop) => target.includes(normalizeStopName(stop.name)));
+}
+
+function maybeAutofillDestinationCoords() {
+  if (!destinationLatEl || !destinationLngEl) {
+    return;
+  }
+  if (destinationLatEl.value || destinationLngEl.value) {
+    return;
+  }
+  const stop = findStopByName(destinationEl.value);
+  if (!stop) {
+    return;
+  }
+  destinationLatEl.value = String(stop.lat);
+  destinationLngEl.value = String(stop.lng);
+}
+
 function getFormValues() {
   return {
     busId: normalizeText(busIdEl.value, MAX_BUS_ID_LEN),
     source: normalizeText(sourceEl.value),
-    destination: normalizeText(destinationEl.value)
+    destination: normalizeText(destinationEl.value),
+    destinationLat: toNumber(destinationLatEl?.value),
+    destinationLng: toNumber(destinationLngEl?.value)
   };
 }
 
@@ -84,6 +128,12 @@ function restoreFormState() {
       busIdEl.value = normalizeText(data.busId, MAX_BUS_ID_LEN);
       sourceEl.value = normalizeText(data.source);
       destinationEl.value = normalizeText(data.destination);
+      if (destinationLatEl && data.destinationLat !== undefined) {
+        destinationLatEl.value = `${data.destinationLat ?? ""}`;
+      }
+      if (destinationLngEl && data.destinationLng !== undefined) {
+        destinationLngEl.value = `${data.destinationLng ?? ""}`;
+      }
     }
   } catch (_err) {
     // ignore corrupt storage
@@ -145,6 +195,21 @@ function restoreSessionState() {
     }
   } catch (_err) {
     clearSessionState();
+  }
+}
+
+async function loadStops() {
+  try {
+    const res = await fetch("/api/stops");
+    if (!res.ok) {
+      return;
+    }
+    const data = await res.json();
+    if (Array.isArray(data.busStops)) {
+      knownStops = data.busStops;
+    }
+  } catch (_err) {
+    // ignore stop lookup failures
   }
 }
 
@@ -227,6 +292,10 @@ async function sendLocation(position) {
     speedKmph: Math.max(0, (position.coords.speed || 0) * 3.6),
     headingDeg: Number.isFinite(position.coords.heading) ? position.coords.heading : 0
   };
+  if (form.destinationLat !== null && form.destinationLng !== null) {
+    payload.destinationLat = form.destinationLat;
+    payload.destinationLng = form.destinationLng;
+  }
 
   try {
     const res = await fetch("/api/driver/location", {
@@ -318,6 +387,12 @@ function startTracking() {
   busIdEl.value = form.busId;
   sourceEl.value = form.source;
   destinationEl.value = form.destination;
+  if (destinationLatEl) {
+    destinationLatEl.value = form.destinationLat ?? "";
+  }
+  if (destinationLngEl) {
+    destinationLngEl.value = form.destinationLng ?? "";
+  }
   saveFormState();
 
   if (!form.busId) {
@@ -406,12 +481,20 @@ startBtn.addEventListener("click", startTracking);
 stopBtn.addEventListener("click", stopTracking);
 unlockBtn.addEventListener("click", unlockDriver);
 
-[busIdEl, sourceEl, destinationEl].forEach((field) => {
+[busIdEl, sourceEl, destinationEl, destinationLatEl, destinationLngEl].forEach((field) => {
+  if (!field) {
+    return;
+  }
   field.addEventListener("input", () => {
     if (field === busIdEl) {
       field.value = normalizeText(field.value, MAX_BUS_ID_LEN);
+    } else if (field === destinationLatEl || field === destinationLngEl) {
+      field.value = field.value.trim();
     } else {
       field.value = normalizeText(field.value);
+    }
+    if (field === destinationEl) {
+      maybeAutofillDestinationCoords();
     }
     saveFormState();
     setControlState();
@@ -439,3 +522,6 @@ window.addEventListener("beforeunload", (event) => {
 restoreFormState();
 restoreSessionState();
 setControlState();
+loadStops().then(() => {
+  maybeAutofillDestinationCoords();
+});

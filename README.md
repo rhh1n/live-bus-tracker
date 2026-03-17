@@ -41,6 +41,7 @@ This project is now structured for real deployments:
   - `https://<your-domain>/driver`
 - Fill:
   - `Bus ID`, `Source`, `Destination`, `Driver PIN`
+  - Optional: `Destination Lat`, `Destination Lng` for accurate ETA to destination
 - Tap `Unlock Driver`
 - Tap `Start Live Tracking`
 - The page continuously uploads GPS to `/api/driver/location`

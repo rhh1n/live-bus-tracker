@@ -535,7 +535,7 @@ function renderArrivals(buses) {
       <div class="meta">Trip: ${escapeHtml(source)} -> ${escapeHtml(destination)}</div>
       <div class="meta">Current location: ${escapeHtml(currentLocation)}</div>
       <div class="meta">Distance from you: ${escapeHtml(userDistance)}</div>
-      <div class="meta">ETA to you: <span data-eta-passenger>--</span></div>
+      <div class="meta">Bus arriving in: <span data-eta-passenger>--</span></div>
       <div class="meta">ETA to destination: <span data-eta-destination>--</span></div>
       <div class="meta">GPS update: ${escapeHtml(formatTime(bus.lastUpdated))} (${escapeHtml(updatedAgo)} ago)</div>
     `;
