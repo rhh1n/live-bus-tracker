@@ -9,6 +9,10 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const DRIVER_API_KEY = process.env.DRIVER_API_KEY || "change-this-driver-key";
+const ORS_API_KEY = process.env.ORS_API_KEY || process.env.OPENROUTESERVICE_API_KEY || "";
+const ORS_BASE_URL = process.env.ORS_BASE_URL || "https://api.openrouteservice.org";
+const ORS_PROFILE = process.env.ORS_PROFILE || "driving-car";
+const ORS_TIMEOUT_MS = 8000;
 const DRIVER_LOGIN_PIN = "13579";
 const ENABLE_SIMULATION = process.env.ENABLE_SIMULATION === "true";
 const STALE_AFTER_MS = Math.max(5000, Number(process.env.BUS_STALE_AFTER_MS) || 15 * 1000);
@@ -26,6 +30,9 @@ const LOGIN_RATE_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_RATE_MAX = 20;
 const LOCATION_RATE_WINDOW_MS = 60 * 1000;
 const LOCATION_RATE_MAX = 240;
+const ETA_RATE_WINDOW_MS = 60 * 1000;
+const ETA_RATE_MAX = 120;
+const ETA_CACHE_TTL_MS = 8000;
 const PASSENGER_WEB_ROOT = path.join(__dirname, "public", "passenger");
 const DRIVER_WEB_ROOT = path.join(__dirname, "public", "driver");
 
@@ -101,6 +108,7 @@ const busState = new Map();
 const driverTokens = new Map();
 const busLocationHistory = new Map();
 const rateLimitBuckets = new Map();
+const etaCache = new Map();
 
 function getClientIp(req) {
   const forwarded = `${req.get("x-forwarded-for") || ""}`.trim();
@@ -143,6 +151,7 @@ function createRateLimiter(scope, windowMs, maxHits) {
 
 const loginRateLimiter = createRateLimiter("driver-login", LOGIN_RATE_WINDOW_MS, LOGIN_RATE_MAX);
 const locationRateLimiter = createRateLimiter("driver-location", LOCATION_RATE_WINDOW_MS, LOCATION_RATE_MAX);
+const etaRateLimiter = createRateLimiter("passenger-eta", ETA_RATE_WINDOW_MS, ETA_RATE_MAX);
 
 function sanitizeText(value, maxLen = MAX_TEXT_FIELD_LEN) {
   const cleaned = `${value ?? ""}`
@@ -154,6 +163,36 @@ function sanitizeText(value, maxLen = MAX_TEXT_FIELD_LEN) {
 
 function isValidCoordinate(lat, lng) {
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
+function normalizeStopName(value) {
+  return sanitizeText(value, MAX_TEXT_FIELD_LEN).toLowerCase();
+}
+
+function findStopByName(name) {
+  if (!name) {
+    return null;
+  }
+  const target = normalizeStopName(name);
+  if (!target) {
+    return null;
+  }
+  const exact = busStops.find((stop) => normalizeStopName(stop.name) === target);
+  if (exact) {
+    return exact;
+  }
+  return busStops.find((stop) => target.includes(normalizeStopName(stop.name)));
+}
+
+function resolveDestinationCoords(bus) {
+  if (Number.isFinite(bus?.destinationLat) && Number.isFinite(bus?.destinationLng)) {
+    return { lat: bus.destinationLat, lng: bus.destinationLng, source: "driver" };
+  }
+  const matchedStop = findStopByName(bus?.destination);
+  if (matchedStop) {
+    return { lat: matchedStop.lat, lng: matchedStop.lng, source: "stop" };
+  }
+  return null;
 }
 
 function appendBusHistory(bus) {
@@ -197,6 +236,61 @@ function distanceKm(aLat, aLng, bLat, bLng) {
     Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
   return R * c;
+}
+
+function roundCoord(value) {
+  return Number(Number(value).toFixed(4));
+}
+
+function buildEtaCacheKey(busId, passengerLat, passengerLng, destinationCoords) {
+  const base = `${busId}:${roundCoord(passengerLat)},${roundCoord(passengerLng)}`;
+  if (!destinationCoords) {
+    return base;
+  }
+  return `${base}:${roundCoord(destinationCoords.lat)},${roundCoord(destinationCoords.lng)}`;
+}
+
+async function fetchOpenRouteServiceRoute(start, end) {
+  if (typeof fetch !== "function") {
+    throw new Error("Fetch API not available in this Node version.");
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ORS_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${ORS_BASE_URL}/v2/directions/${ORS_PROFILE}/geojson`, {
+      method: "POST",
+      headers: {
+        Authorization: ORS_API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        coordinates: [
+          [start.lng, start.lat],
+          [end.lng, end.lat]
+        ]
+      }),
+      signal: controller.signal
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`OpenRouteService error (${res.status}): ${text.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const feature = data?.features?.[0];
+    const summary = feature?.properties?.summary || {};
+    const durationSec = Number(summary.duration);
+    const distanceM = Number(summary.distance);
+    if (!Number.isFinite(durationSec) || !Number.isFinite(distanceM)) {
+      throw new Error("OpenRouteService response missing summary.");
+    }
+    return {
+      durationSec,
+      distanceM,
+      geojson: data
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function getNearestStop(lat, lng, speedKmph) {
@@ -250,6 +344,7 @@ function listLiveBuses() {
     .filter((bus) => now - new Date(bus.lastUpdated).getTime() <= STALE_AFTER_MS)
     .map((bus) => ({
       ...bus,
+      destinationCoords: resolveDestinationCoords(bus),
       nearestStop: getNearestStop(bus.lat, bus.lng, bus.speedKmph),
       updateHistory: getBusHistory(bus.id, 6).map((entry) => entry.updatedAt)
     }));
@@ -395,10 +490,98 @@ app.get("/api/buses/live", (req, res) => {
   });
 });
 
+app.post("/api/eta", etaRateLimiter, async (req, res) => {
+  if (!ORS_API_KEY) {
+    return res.status(503).json({ error: "OpenRouteService API key not configured." });
+  }
+
+  const busId = sanitizeText(req.body?.busId, MAX_BUS_ID_LEN);
+  const passengerLat = toNumber(req.body?.passengerLat);
+  const passengerLng = toNumber(req.body?.passengerLng);
+  if (!busId || passengerLat === null || passengerLng === null) {
+    return res.status(400).json({ error: "busId, passengerLat, passengerLng are required." });
+  }
+  if (!isValidCoordinate(passengerLat, passengerLng)) {
+    return res.status(400).json({ error: "passengerLat/passengerLng must be valid coordinates." });
+  }
+
+  const bus = busState.get(busId);
+  if (!bus) {
+    return res.status(404).json({ error: "Bus not found." });
+  }
+  if (Date.now() - new Date(bus.lastUpdated).getTime() > STALE_AFTER_MS) {
+    return res.status(404).json({ error: "Bus location is stale." });
+  }
+
+  const destinationCoords = resolveDestinationCoords(bus);
+  const cacheKey = buildEtaCacheKey(busId, passengerLat, passengerLng, destinationCoords);
+  const cached = etaCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return res.json(cached.payload);
+  }
+
+  try {
+    const toPassenger = await fetchOpenRouteServiceRoute(
+      { lat: bus.lat, lng: bus.lng },
+      { lat: passengerLat, lng: passengerLng }
+    );
+    const toDestination = destinationCoords
+      ? await fetchOpenRouteServiceRoute({ lat: bus.lat, lng: bus.lng }, destinationCoords)
+      : null;
+
+    const payload = {
+      ok: true,
+      source: "openrouteservice",
+      busId,
+      bus: {
+        lat: bus.lat,
+        lng: bus.lng,
+        lastUpdated: bus.lastUpdated
+      },
+      passenger: {
+        lat: passengerLat,
+        lng: passengerLng
+      },
+      toPassenger: {
+        durationSec: toPassenger.durationSec,
+        distanceM: toPassenger.distanceM,
+        etaMin: Math.max(1, Math.round(toPassenger.durationSec / 60)),
+        route: toPassenger.geojson
+      },
+      toDestination: toDestination
+        ? {
+            durationSec: toDestination.durationSec,
+            distanceM: toDestination.distanceM,
+            etaMin: Math.max(1, Math.round(toDestination.durationSec / 60)),
+            route: toDestination.geojson
+          }
+        : null
+    };
+
+    etaCache.set(cacheKey, { expiresAt: Date.now() + ETA_CACHE_TTL_MS, payload });
+    return res.json(payload);
+  } catch (err) {
+    return res.status(502).json({ error: "Unable to fetch ETA from OpenRouteService." });
+  }
+});
+
 app.post("/api/driver/location", locationRateLimiter, requireDriverAuth, (req, res) => {
-  const { busId, routeNo, source, destination, lat, lng, speedKmph, headingDeg } = req.body || {};
+  const {
+    busId,
+    routeNo,
+    source,
+    destination,
+    lat,
+    lng,
+    speedKmph,
+    headingDeg,
+    destinationLat,
+    destinationLng
+  } = req.body || {};
   const latN = toNumber(lat);
   const lngN = toNumber(lng);
+  const destLatN = toNumber(destinationLat);
+  const destLngN = toNumber(destinationLng);
 
   const busIdClean = sanitizeText(busId, MAX_BUS_ID_LEN);
   if (!busIdClean || latN === null || lngN === null) {
@@ -407,6 +590,12 @@ app.post("/api/driver/location", locationRateLimiter, requireDriverAuth, (req, r
   if (!isValidCoordinate(latN, lngN)) {
     return res.status(400).json({ error: "lat/lng must be valid coordinates." });
   }
+  if ((destinationLat !== undefined || destinationLng !== undefined) && (destLatN === null || destLngN === null)) {
+    return res.status(400).json({ error: "destinationLat/destinationLng must be valid coordinates." });
+  }
+  if (destLatN !== null && destLngN !== null && !isValidCoordinate(destLatN, destLngN)) {
+    return res.status(400).json({ error: "destinationLat/destinationLng must be valid coordinates." });
+  }
 
   const existing = busState.get(busIdClean);
   const routeNoClean = sanitizeText(routeNo, MAX_ROUTE_NO_LEN) || existing?.routeNo || busIdClean;
@@ -414,12 +603,18 @@ app.post("/api/driver/location", locationRateLimiter, requireDriverAuth, (req, r
   const destinationClean = sanitizeText(destination, MAX_TEXT_FIELD_LEN) || existing?.destination || "Unknown";
   const speed = Math.min(MAX_SPEED_KMPH, Math.max(0, toNumber(speedKmph) || existing?.speedKmph || 0));
   const heading = Math.max(0, Math.min(359, toNumber(headingDeg) || existing?.headingDeg || 0));
+  const destinationLatClean =
+    destLatN !== null && destLngN !== null ? destLatN : existing?.destinationLat ?? null;
+  const destinationLngClean =
+    destLatN !== null && destLngN !== null ? destLngN : existing?.destinationLng ?? null;
 
   const payload = {
     id: busIdClean,
     routeNo: routeNoClean,
     source: sourceClean,
     destination: destinationClean,
+    destinationLat: destinationLatClean,
+    destinationLng: destinationLngClean,
     lat: latN,
     lng: lngN,
     speedKmph: speed,

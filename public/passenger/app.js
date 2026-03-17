@@ -36,6 +36,7 @@ if (hasLeaflet) {
 }
 
 const busMarkers = new Map();
+const arrivalCardById = new Map();
 const locateBtn = document.getElementById("locate-btn");
 const manualLocateBtn = document.getElementById("manual-locate-btn");
 const radiusSelect = document.getElementById("radius-select");
@@ -44,6 +45,10 @@ const locationStatusEl = document.getElementById("location-status");
 const busLocationNameCache = new Map();
 const busLocationNameInFlight = new Set();
 const geocodeQueue = [];
+const etaCache = new Map();
+const etaInFlight = new Map();
+const notifiedBusIds = new Set();
+const routeLayers = hasLeaflet ? L.layerGroup().addTo(map) : null;
 
 let userLocation = null;
 let userMarker = null;
@@ -58,12 +63,20 @@ let hasReliableFix = false;
 let geocodeWorkerRunning = false;
 let latestLiveBuses = [];
 let geocodeRenderScheduled = false;
+let focusBusId = null;
+let routeToPassengerLayer = null;
+let routeToDestinationLayer = null;
+let notificationPermissionRequested = false;
 
 const COARSE_LOCATION_LIMIT_M = 3000;
 const HIGH_ACCURACY_M = 120;
 const APPROXIMATE_ACCURACY_M = 1000;
 const COARSE_FIX_RETRY_LIMIT = 3;
 const PASSENGER_UPDATE_INTERVAL_MS = 2000;
+const ETA_CACHE_TTL_MS = 10000;
+const ETA_MAX_BUSES = 8;
+const ETA_NOTIFY_MIN = 5;
+const MAX_NEAR_STOP_DISTANCE_KM = 5;
 const GEOCODE_REQUEST_GAP_MS = 1200;
 
 function formatTime(iso) {
@@ -87,6 +100,16 @@ function formatRelativeAge(iso) {
   return `${hours}h`;
 }
 
+function formatEtaMinutes(value) {
+  if (!Number.isFinite(value)) {
+    return "N/A";
+  }
+  if (value < 1) {
+    return "<1 min";
+  }
+  return `${Math.round(value)} min`;
+}
+
 function escapeHtml(value) {
   return `${value ?? ""}`
     .replace(/&/g, "&amp;")
@@ -105,6 +128,69 @@ function distanceKm(aLat, aLng, bLat, bLng) {
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
   return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
+}
+
+function requestNotificationPermission() {
+  if (!("Notification" in window)) {
+    return;
+  }
+  if (Notification.permission !== "default" || notificationPermissionRequested) {
+    return;
+  }
+  notificationPermissionRequested = true;
+  Notification.requestPermission().catch(() => {});
+}
+
+function maybeNotifyArrival(bus, etaMin) {
+  if (!("Notification" in window)) {
+    return;
+  }
+  if (Notification.permission !== "granted") {
+    return;
+  }
+  if (!Number.isFinite(etaMin) || etaMin > ETA_NOTIFY_MIN) {
+    return;
+  }
+  if (notifiedBusIds.has(bus.id)) {
+    return;
+  }
+  notifiedBusIds.add(bus.id);
+  try {
+    new Notification(`Bus ${bus.id} arriving`, { body: "Your bus is arriving in 5 minutes." });
+  } catch (_err) {
+    // Ignore notification errors
+  }
+}
+
+function clearRouteLayers() {
+  if (!routeLayers) {
+    return;
+  }
+  if (routeToPassengerLayer) {
+    routeLayers.removeLayer(routeToPassengerLayer);
+    routeToPassengerLayer = null;
+  }
+  if (routeToDestinationLayer) {
+    routeLayers.removeLayer(routeToDestinationLayer);
+    routeToDestinationLayer = null;
+  }
+}
+
+function drawRoutes(etaPayload) {
+  if (!routeLayers || !etaPayload) {
+    return;
+  }
+  clearRouteLayers();
+  if (etaPayload.toPassenger?.route) {
+    routeToPassengerLayer = L.geoJSON(etaPayload.toPassenger.route, {
+      style: { color: "#0b6bcb", weight: 4, opacity: 0.9 }
+    }).addTo(routeLayers);
+  }
+  if (etaPayload.toDestination?.route) {
+    routeToDestinationLayer = L.geoJSON(etaPayload.toDestination.route, {
+      style: { color: "#f2992f", weight: 3, opacity: 0.8, dashArray: "8 6" }
+    }).addTo(routeLayers);
+  }
 }
 
 function focusMapOnServiceArea(busStops) {
@@ -242,6 +328,120 @@ async function processGeocodeQueue() {
   geocodeWorkerRunning = false;
 }
 
+function buildEtaCacheKey(busId, passengerLat, passengerLng) {
+  const round = (value) => Number(Number(value).toFixed(4));
+  return `${busId}:${round(passengerLat)},${round(passengerLng)}`;
+}
+
+function selectFocusBusId(buses) {
+  if (!buses.length) {
+    return null;
+  }
+  if (!userLocation) {
+    return buses[0].id;
+  }
+  const candidates = buses.filter((bus) => Number.isFinite(bus.distanceToUserKm));
+  if (!candidates.length) {
+    return buses[0].id;
+  }
+  return candidates.sort((a, b) => a.distanceToUserKm - b.distanceToUserKm)[0].id;
+}
+
+function selectBusesForEta(buses) {
+  if (!userLocation) {
+    return [];
+  }
+  const withDistance = buses
+    .filter((bus) => Number.isFinite(bus.distanceToUserKm))
+    .sort((a, b) => a.distanceToUserKm - b.distanceToUserKm);
+  const ordered = withDistance.length ? withDistance : buses.slice();
+  return ordered.slice(0, ETA_MAX_BUSES);
+}
+
+async function fetchEtaForBus(bus) {
+  if (!userLocation || !bus?.id) {
+    return null;
+  }
+  const cacheKey = buildEtaCacheKey(bus.id, userLocation.lat, userLocation.lng);
+  const cached = etaCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.payload;
+  }
+  if (etaInFlight.has(cacheKey)) {
+    return etaInFlight.get(cacheKey);
+  }
+
+  const promise = (async () => {
+    try {
+      const res = await fetch("/api/eta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          busId: bus.id,
+          passengerLat: userLocation.lat,
+          passengerLng: userLocation.lng
+        })
+      });
+      if (!res.ok) {
+        return null;
+      }
+      const payload = await res.json();
+      etaCache.set(cacheKey, { payload, expiresAt: Date.now() + ETA_CACHE_TTL_MS });
+      return payload;
+    } catch (_err) {
+      return null;
+    } finally {
+      etaInFlight.delete(cacheKey);
+    }
+  })();
+
+  etaInFlight.set(cacheKey, promise);
+  return promise;
+}
+
+function updateEtaDisplay(busId, etaPayload) {
+  const card = arrivalCardById.get(busId);
+  if (!card) {
+    return;
+  }
+  const toPassengerEl = card.querySelector("[data-eta-passenger]");
+  const toDestinationEl = card.querySelector("[data-eta-destination]");
+  if (toPassengerEl) {
+    const etaMin = etaPayload?.toPassenger?.etaMin;
+    toPassengerEl.textContent = formatEtaMinutes(etaMin);
+  }
+  if (toDestinationEl) {
+    const etaMin = etaPayload?.toDestination?.etaMin;
+    toDestinationEl.textContent = etaPayload?.toDestination ? formatEtaMinutes(etaMin) : "N/A";
+  }
+}
+
+async function updateEtasForBuses(buses) {
+  if (!userLocation || !buses.length) {
+    clearRouteLayers();
+    return;
+  }
+  focusBusId = selectFocusBusId(buses);
+  const etaTargets = selectBusesForEta(buses);
+  if (!etaTargets.length) {
+    return;
+  }
+
+  const results = await Promise.allSettled(etaTargets.map((bus) => fetchEtaForBus(bus)));
+  results.forEach((result, index) => {
+    if (result.status !== "fulfilled" || !result.value) {
+      return;
+    }
+    const bus = etaTargets[index];
+    updateEtaDisplay(bus.id, result.value);
+    if (bus.id === focusBusId) {
+      drawRoutes(result.value);
+    }
+    const etaMin = result.value?.toPassenger?.etaMin;
+    maybeNotifyArrival(bus, etaMin);
+  });
+}
+
 function queuePlaceLookup(lat, lng, key) {
   if (busLocationNameCache.has(key) || busLocationNameInFlight.has(key)) {
     return;
@@ -314,6 +514,7 @@ function clearOldBusMarkers(currentBusIds) {
 function renderArrivals(buses) {
   const host = document.getElementById("arrivals");
   host.innerHTML = "";
+  arrivalCardById.clear();
   if (!buses.length) {
     host.innerHTML =
       '<article class="arrival-card" style="--stagger-index:0"><div class="meta">No live buses found for selected radius.</div></article>';
@@ -322,6 +523,7 @@ function renderArrivals(buses) {
   buses.forEach((bus, index) => {
     const card = document.createElement("article");
     card.className = "arrival-card";
+    card.dataset.busId = bus.id || "";
     card.style.setProperty("--stagger-index", String(index));
     const userDistance = bus.distanceToUserKm == null ? "N/A" : `${bus.distanceToUserKm} km`;
     const source = bus.source || "Unknown";
@@ -333,9 +535,14 @@ function renderArrivals(buses) {
       <div class="meta">Trip: ${escapeHtml(source)} -> ${escapeHtml(destination)}</div>
       <div class="meta">Current location: ${escapeHtml(currentLocation)}</div>
       <div class="meta">Distance from you: ${escapeHtml(userDistance)}</div>
+      <div class="meta">ETA to you: <span data-eta-passenger>--</span></div>
+      <div class="meta">ETA to destination: <span data-eta-destination>--</span></div>
       <div class="meta">GPS update: ${escapeHtml(formatTime(bus.lastUpdated))} (${escapeHtml(updatedAgo)} ago)</div>
     `;
     host.appendChild(card);
+    if (bus.id) {
+      arrivalCardById.set(bus.id, card);
+    }
   });
 }
 
@@ -378,6 +585,10 @@ function setUserLocation(lat, lng, accuracyMeters = null, source = "gps") {
   if (!hasCenteredOnUser || source === "manual") {
     map.setView([lat, lng], 14);
     hasCenteredOnUser = true;
+  }
+
+  if (backendOnline && latestLiveBuses.length) {
+    updateEtasForBuses(latestLiveBuses).catch(() => {});
   }
 }
 
@@ -432,12 +643,15 @@ function pollPassengerPositionOnce() {
   );
 }
 
-function startPassengerLocationTracking() {
+function startPassengerLocationTracking(options = {}) {
   if (passengerWatchId !== null || !navigator.geolocation) {
     return;
   }
   manualPickMode = false;
   coarseFixCount = 0;
+  if (options.requestNotifications === true) {
+    requestNotificationPermission();
+  }
   manualLocateBtn.textContent = "Set on map";
   locationStatusEl.textContent = "Waiting for accurate GPS fix... Updates every 2s.";
   pollPassengerPositionOnce();
@@ -535,6 +749,7 @@ async function fetchLiveBuses() {
   });
   clearOldBusMarkers(ids);
   renderArrivals(payload.buses);
+  updateEtasForBuses(payload.buses).catch(() => {});
   lastUpdatedEl.textContent = `Last updated: ${formatTime(payload.updatedAt)} (server live data)`;
 }
 
@@ -559,7 +774,7 @@ locateBtn.addEventListener("click", () => {
     stopPassengerLocationTracking();
     return;
   }
-  startPassengerLocationTracking();
+  startPassengerLocationTracking({ requestNotifications: true });
 });
 
 if (manualLocateBtn) {
@@ -574,6 +789,7 @@ if (hasLeaflet) {
     manualPickMode = false;
     manualLocateBtn.textContent = "Set on map";
     setUserLocation(event.latlng.lat, event.latlng.lng, 25, "manual");
+    requestNotificationPermission();
     if (backendOnline) fetchLiveBuses().catch(() => {});
   });
 }

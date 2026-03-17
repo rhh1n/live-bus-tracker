@@ -20,7 +20,9 @@ This project is now structured for real deployments:
    `$env:DRIVER_API_KEY="your-strong-key"`
 5. Set driver login PIN (PowerShell):
    `$env:DRIVER_LOGIN_PIN="13579"`
-6. Start server:
+6. Set OpenRouteService API key (PowerShell, for ETA + routes):
+   `$env:ORS_API_KEY="your-openrouteservice-key"`
+7. Start server:
    `npm start`
 7. Open:
    - Passenger: `http://localhost:3000/passenger`
@@ -65,6 +67,8 @@ Body example:
   "busId": "bus-101",
   "source": "Central Bus Stand",
   "destination": "Railway Junction",
+  "destinationLat": 12.9665,
+  "destinationLng": 77.5881,
   "lat": 12.9722,
   "lng": 77.5954,
   "speedKmph": 28,
@@ -84,9 +88,19 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/driver/location" 
 - `GET /api/stops`
 - `GET /api/buses/live?lat=<lat>&lng=<lng>&radiusKm=<km>`
 - `GET /api/buses/history?busId=<id>&limit=<n>`
+- `POST /api/eta` (requires `ORS_API_KEY`)
 - `POST /api/driver/login` (requires PIN)
 - `POST /api/driver/location` (requires `x-driver-token` or `x-api-key`)
 - `POST /api/driver/stop` (removes bus instantly from passenger view; requires `x-driver-token` or `x-api-key`)
+
+ETA request body example:
+```json
+{
+  "busId": "bus-101",
+  "passengerLat": 12.9716,
+  "passengerLng": 77.5946
+}
+```
 
 ## Production Next Steps
 - Replace in-memory state with Redis/PostgreSQL.
