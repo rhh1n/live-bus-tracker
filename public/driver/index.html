@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0057d9" />
   <title>Driver GPS Uploader</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="/driver/styles.css" />
 </head>
 <body class="page page-driver">
@@ -19,7 +20,7 @@
     </div>
   </header>
 
-  <main class="layout">
+  <main class="layout driver-layout">
     <section class="list-panel driver-panel surface">
       <div class="panel-title">
         <h2>Driver Console</h2>
@@ -55,8 +56,16 @@
       <p id="driver-status" class="status-line" aria-live="polite">Idle.</p>
       <p id="driver-last" class="status-line">No GPS sent yet.</p>
     </section>
+    <section class="map-panel surface">
+      <div class="panel-title">
+        <h2>Pick Destination</h2>
+        <p>Tap the map to set destination coordinates for accurate ETA.</p>
+      </div>
+      <div id="destination-map" aria-label="Destination map"></div>
+    </section>
   </main>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="/driver/driver.js"></script>
 </body>
 </html>

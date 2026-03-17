@@ -10,6 +10,8 @@ const stopBtn = document.getElementById("stop-btn");
 const statusEl = document.getElementById("driver-status");
 const lastEl = document.getElementById("driver-last");
 const logEl = document.getElementById("driver-log");
+const destinationMapHost = document.getElementById("destination-map");
+const hasLeaflet = typeof L !== "undefined";
 
 let watchId = null;
 let sendInFlight = false;
@@ -19,6 +21,8 @@ let latestPosition = null;
 let uploadIntervalId = null;
 let firstFixSent = false;
 let knownStops = [];
+let destinationMap = null;
+let destinationMarker = null;
 
 const DRIVER_UPLOAD_INTERVAL_MS = 2000;
 const FORM_STORAGE_KEY = "bus-tracker-driver-form-v1";
@@ -76,8 +80,7 @@ function maybeAutofillDestinationCoords() {
   if (!stop) {
     return;
   }
-  destinationLatEl.value = String(stop.lat);
-  destinationLngEl.value = String(stop.lng);
+  setDestinationCoords(stop.lat, stop.lng, "stop");
 }
 
 function getFormValues() {
@@ -109,6 +112,44 @@ function addLog(msg) {
 
 function setStatus(msg) {
   statusEl.textContent = msg;
+}
+
+function setDestinationCoords(lat, lng, source = "map") {
+  if (!destinationLatEl || !destinationLngEl) {
+    return;
+  }
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return;
+  }
+  destinationLatEl.value = lat.toFixed(6);
+  destinationLngEl.value = lng.toFixed(6);
+  updateDestinationMarker(lat, lng);
+  if (source === "map") {
+    addLog(`Destination set from map: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+  }
+  saveFormState();
+  setControlState();
+}
+
+function updateDestinationMarker(lat, lng) {
+  if (!destinationMap || !hasLeaflet) {
+    return;
+  }
+  if (!destinationMarker) {
+    destinationMarker = L.marker([lat, lng]).addTo(destinationMap);
+    destinationMarker.bindPopup("Destination");
+  } else {
+    destinationMarker.setLatLng([lat, lng]);
+  }
+}
+
+function updateMarkerFromInputs() {
+  const lat = toNumber(destinationLatEl?.value);
+  const lng = toNumber(destinationLngEl?.value);
+  if (lat === null || lng === null) {
+    return;
+  }
+  updateDestinationMarker(lat, lng);
 }
 
 function saveFormState() {
@@ -214,6 +255,40 @@ async function loadStops() {
   } catch (_err) {
     // ignore stop lookup failures
   }
+}
+
+function initDestinationMap() {
+  if (!destinationMapHost) {
+    return;
+  }
+  if (!hasLeaflet) {
+    destinationMapHost.innerHTML =
+      "<div style='padding:12px;color:#6c7a90'>Map unavailable (internet blocked). You can still type destination coordinates.</div>";
+    return;
+  }
+
+  destinationMap = L.map(destinationMapHost, { zoomControl: true });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(destinationMap);
+
+  if (knownStops.length) {
+    const bounds = L.latLngBounds(knownStops.map((stop) => [stop.lat, stop.lng]));
+    if (bounds.isValid()) {
+      destinationMap.fitBounds(bounds.pad(0.25), { maxZoom: 14 });
+    } else {
+      destinationMap.setView([12.9716, 77.5946], 13);
+    }
+  } else {
+    destinationMap.setView([12.9716, 77.5946], 13);
+  }
+
+  destinationMap.on("click", (event) => {
+    setDestinationCoords(event.latlng.lat, event.latlng.lng, "map");
+  });
+
+  updateMarkerFromInputs();
 }
 
 function clearDriverSession() {
@@ -499,6 +574,9 @@ unlockBtn.addEventListener("click", unlockDriver);
     if (field === destinationEl) {
       maybeAutofillDestinationCoords();
     }
+    if (field === destinationLatEl || field === destinationLngEl) {
+      updateMarkerFromInputs();
+    }
     saveFormState();
     setControlState();
   });
@@ -527,4 +605,5 @@ restoreSessionState();
 setControlState();
 loadStops().then(() => {
   maybeAutofillDestinationCoords();
+  initDestinationMap();
 });

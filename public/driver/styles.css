@@ -280,6 +280,12 @@ h1 {
   height: calc(100vh - 250px);
 }
 
+#destination-map {
+  width: 100%;
+  min-height: 360px;
+  height: 52vh;
+}
+
 .list-panel,
 .driver-panel,
 .tips-panel {
@@ -637,6 +643,11 @@ input {
     min-height: 360px;
     height: 56vh;
   }
+
+  #destination-map {
+    min-height: 320px;
+    height: 44vh;
+  }
 }
 
 @media (max-width: 760px) {
@@ -723,6 +734,11 @@ input {
   #map {
     min-height: 250px;
     height: 42svh;
+  }
+
+  #destination-map {
+    min-height: 240px;
+    height: 38svh;
   }
 
   .passenger-layout .map-panel {
